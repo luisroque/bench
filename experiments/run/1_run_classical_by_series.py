@@ -9,6 +9,7 @@ from statsforecast.models import (
     RandomWalkWithDrift,
     AutoTheta,
     SimpleExponentialSmoothingOptimized,
+    CrostonOptimized,
 )
 
 from codebase.load_data.config import DATASETS
@@ -16,8 +17,9 @@ from codebase.load_data.config import DATASETS
 # Define the datasets and their groups
 # TODO: Add more datasets, for example, tourism
 datasets = {
-    # "M3": ["Monthly", "Quarterly", "Yearly"],
-    # "M4": ["Monthly", "Quarterly", "Yearly"],
+    "Tourism": ["Monthly", "Quarterly"],
+    "M3": ["Monthly", "Quarterly", "Yearly"],
+    "M4": ["Monthly", "Quarterly", "Yearly"],
     "M5": ["Daily"],
 }
 
@@ -34,7 +36,6 @@ for data_name, groups in datasets.items():
             freq = data_cls.frequency_pd[group]
 
         freq_int = data_cls.frequency_map.get(group)
-        season_len = data_cls.frequency_map[group]
 
         ds_grouped = ds.groupby("unique_id")
         for tsname, df in ds_grouped:
@@ -50,6 +51,10 @@ for data_name, groups in datasets.items():
             else:
                 pd.DataFrame().to_csv(filepath, index=False)
 
+            season_len = data_cls.frequency_map[group]
+            if 2 * season_len >= df.shape[0]:
+                season_len = 1
+
             cls_models = [
                 RandomWalkWithDrift(),
                 SeasonalNaive(season_length=season_len),
@@ -57,6 +62,7 @@ for data_name, groups in datasets.items():
                 AutoARIMA(max_P=1, max_p=1, max_D=1, max_d=1, max_q=1, max_Q=1),
                 AutoTheta(season_length=season_len),
                 SimpleExponentialSmoothingOptimized(),
+                CrostonOptimized(),
             ]
 
             sf = StatsForecast(

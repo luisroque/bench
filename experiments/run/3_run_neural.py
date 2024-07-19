@@ -1,22 +1,30 @@
 import os
-from neuralforecast.models import NHITS, NBEATS, DeepAR
 from neuralforecast import NeuralForecast
-
+from neuralforecast.auto import (
+    AutoRNN,
+    AutoTCN,
+    AutoDeepAR,
+    AutoMLP,
+    AutoNBEATS,
+    AutoNHITS,
+    AutoTiDE,
+    AutoTFT,
+    AutoVanillaTransformer,
+    AutoInformer,
+    AutoPatchTST,
+    AutoTSMixer,
+)
 from codebase.load_data.config import DATASETS
 
-CONFIG = {
-    "max_steps": 1500,
-    "val_check_steps": 50,
-    "enable_checkpointing": True,
-    "start_padding_enabled": True,
-    "accelerator": "cpu",
-}
+# Set the environment variable to use CPU fallback for unsupported MPS operations
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
 # Define the datasets and their groups
 # TODO: Add more datasets, for example, tourism
 datasets = {
-    # "M3": ["Monthly", "Quarterly", "Yearly"],
-    # "M4": ["Monthly", "Quarterly", "Yearly"],
+    "Tourism": ["Monthly", "Quarterly"],
+    "M3": ["Monthly", "Quarterly", "Yearly"],
+    "M4": ["Monthly", "Quarterly", "Yearly"],
     "M5": ["Daily"],
 }
 
@@ -41,11 +49,21 @@ for data_name, groups in datasets.items():
         n_lags = data_cls.context_length[group]
         freq = data_cls.frequency_pd[group]
         season_len = data_cls.frequency_map[group]
+        n_series = ds.nunique()["unique_id"]
 
         models = [
-            NHITS(h=h, input_size=n_lags, **CONFIG),
-            NBEATS(h=h, input_size=n_lags, **CONFIG),
-            DeepAR(h=h, input_size=n_lags, **CONFIG),
+            AutoRNN(h=h),
+            AutoTCN(h=h),
+            AutoDeepAR(h=h),
+            AutoMLP(h=h),
+            AutoNBEATS(h=h),
+            AutoNHITS(h=h),
+            AutoTiDE(h=h),
+            AutoTFT(h=h),
+            AutoVanillaTransformer(h=h),
+            AutoInformer(h=h),
+            AutoPatchTST(h=h),
+            AutoTSMixer(h=h, n_series=n_series),
         ]
 
         nf = NeuralForecast(models=models, freq=freq)
