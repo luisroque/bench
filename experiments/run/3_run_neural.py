@@ -11,7 +11,6 @@ from neuralforecast.auto import (
 from codebase.load_data.config import DATASETS
 
 # Define the datasets and their groups
-# TODO: Add more datasets, for example, tourism
 datasets = {
     "Tourism": ["Monthly", "Quarterly"],
     "M3": ["Monthly", "Quarterly", "Yearly"],
@@ -38,7 +37,10 @@ for data_name, groups in datasets.items():
 
         h = data_cls.horizons_map[group]
         n_lags = data_cls.context_length[group]
-        freq = data_cls.frequency_pd[group]
+        if data_name == "M4":
+            freq = data_cls.frequency_map.get(group)
+        else:
+            freq = data_cls.frequency_pd[group]
         season_len = data_cls.frequency_map[group]
         n_series = ds.nunique()["unique_id"]
 

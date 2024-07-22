@@ -15,7 +15,6 @@ from statsforecast.models import (
 from codebase.load_data.config import DATASETS
 
 # Define the datasets and their groups
-# TODO: Add more datasets, for example, tourism
 datasets = {
     "Tourism": ["Monthly", "Quarterly"],
     "M3": ["Monthly", "Quarterly", "Yearly"],
