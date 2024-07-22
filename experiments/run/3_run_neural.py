@@ -4,20 +4,11 @@ from neuralforecast.auto import (
     AutoRNN,
     AutoTCN,
     AutoDeepAR,
-    AutoMLP,
     AutoNBEATS,
-    AutoNHITS,
     AutoTiDE,
-    AutoTFT,
-    AutoVanillaTransformer,
     AutoInformer,
-    AutoPatchTST,
-    AutoTSMixer,
 )
 from codebase.load_data.config import DATASETS
-
-# Set the environment variable to use CPU fallback for unsupported MPS operations
-os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
 # Define the datasets and their groups
 # TODO: Add more datasets, for example, tourism
@@ -52,18 +43,12 @@ for data_name, groups in datasets.items():
         n_series = ds.nunique()["unique_id"]
 
         models = [
-            AutoRNN(h=h),
-            AutoTCN(h=h),
-            AutoDeepAR(h=h),
-            AutoMLP(h=h),
-            AutoNBEATS(h=h),
-            AutoNHITS(h=h),
-            AutoTiDE(h=h),
-            AutoTFT(h=h),
-            AutoVanillaTransformer(h=h),
-            AutoInformer(h=h),
-            AutoPatchTST(h=h),
-            AutoTSMixer(h=h, n_series=n_series),
+            AutoRNN(h=h, cpus=15, gpus=0),
+            AutoTCN(h=h, cpus=15, gpus=0),
+            AutoDeepAR(h=h, cpus=15, gpus=0),
+            AutoNBEATS(h=h, cpus=15, gpus=0),
+            AutoTiDE(h=h, cpus=15, gpus=0),
+            AutoInformer(h=h, cpus=15, gpus=0),
         ]
 
         nf = NeuralForecast(models=models, freq=freq)

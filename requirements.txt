@@ -75,7 +75,7 @@ triad==0.9.3
 typing_extensions==4.9.0
 tzdata==2023.3
 urllib3==2.1.0
-utilsforecast==0.0.23
+utilsforecast==0.0.25
 xlrd==2.0.1
 yarl==1.9.4
 zipp==3.17.0
