@@ -56,5 +56,6 @@ for data_name, groups in datasets.items():
         nf = NeuralForecast(models=models, freq=freq)
 
         cv_nf = nf.cross_validation(df=ds, test_size=h, n_windows=None)
+        cv_nf = cv_nf.reset_index()
 
         cv_nf.to_csv(OUTPUT_DIR, index=False)
