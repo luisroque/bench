@@ -3,28 +3,38 @@ from neuralforecast.losses.numpy import smape
 
 from codebase.load_data.config import DATASETS
 
-DS = "M4"
-group = "Monthly"
+datasets = {
+    "Tourism": ["Monthly", "Quarterly"],
+    "M3": ["Monthly", "Quarterly", "Yearly"],
+    # "M4": ["Monthly", "Quarterly", "Yearly"],
+    # "M5": ["Daily"],
+}
 
-data_cls = DATASETS[DS]
-INPUT_CLS = "./assets/results/by_group/{}_{}_classical.csv"
-INPUT_NEURAL = "./assets/results/by_group/{}_{}_neural.csv"
-OUTPUT_DIR = "./assets/results/by_group/{}_{}_all.csv"
+for data_name, groups in datasets.items():
+    for group in groups:
 
-cv_cls = pd.read_csv(INPUT_CLS.format(DS, group))
-cv_neural = pd.read_csv(INPUT_NEURAL.format(DS, group))
+        data_cls = DATASETS[data_name]
+        INPUT_CLS = "./assets/results/by_group/{}_{}_classical.csv"
+        INPUT_NEURAL = "./assets/results/by_group/{}_{}_neural.csv"
+        OUTPUT_DIR = "./assets/results/by_group/{}_{}_all.csv"
 
-cv = cv_cls.merge(
-    cv_neural.drop(columns=["y"]), how="left", on=["unique_id", "ds", "cutoff"]
-)
+        cv_cls = pd.read_csv(INPUT_CLS.format(data_name, group))
+        cv_neural = pd.read_csv(INPUT_NEURAL.format(data_name, group))
 
-cv = cv.reset_index(drop=True)
+        # TODO: remove this line and re-run neural predictions with unique_id
+        cv_neural["unique_id"] = cv_cls["unique_id"]
 
-output_file = OUTPUT_DIR.format(DS, group)
+        cv = cv_cls.merge(
+            cv_neural.drop(columns=["y"]), how="left", on=["unique_id", "ds", "cutoff"]
+        )
 
-cv.to_csv(output_file, index=False)
+        cv = cv.reset_index(drop=True)
 
-print(cv.isna().mean())
-print(smape(cv["y"], cv["NHITS"]))
-print(smape(cv["y"], cv["SeasonalNaive"]))
-print(smape(cv["y"], cv["AutoTheta"]))
+        output_file = OUTPUT_DIR.format(data_name, group)
+
+        cv.to_csv(output_file, index=False)
+
+        print(cv.isna().mean())
+        print(smape(cv["y"], cv["AutoNBEATS"]))
+        print(smape(cv["y"], cv["SeasonalNaive"]))
+        print(smape(cv["y"], cv["AutoTheta"]))
