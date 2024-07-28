@@ -7,11 +7,9 @@ from codebase.evaluation.plotting import Plots
 
 ROPE = 5
 LOG = False
+REFERENCE = "DeepAR"
 
-# results_df = EvaluationWorkflow.read_all_results(['M3', 'Tourism', 'M4'])
-results_df = EvaluationWorkflow.read_all_results(['M3'])
-
-eval_wf = EvaluationWorkflow(results_df, baseline='SNaive', reference='NHITS')
+eval_wf = EvaluationWorkflow(datasets=["M3", "Tourism", "M4"], baseline="SNaive")
 
 df = eval_wf.eval_by_series()
 
@@ -20,21 +18,31 @@ shortfall = eval_wf.get_expected_shortfall(df, 0.95)
 if LOG:
     df = LogTransformation.transform(df)
 
-df_m = eval_wf.melt_data_by_series(df)
-df_ranks_m = eval_wf.melt_data_by_series(df.rank(axis=1))
+df_m = eval_wf.error_by_model(df)
+df_ranks_m = eval_wf.rank_by_model(df)
 
-wr_rope = RopeAnalysis.get_probs(df, rope=ROPE, reference=eval_wf.reference)
-wr_rope0 = RopeAnalysis.get_probs(df, rope=0, reference=eval_wf.reference)
+wr_rope = RopeAnalysis.get_probs(df, rope=ROPE, reference=REFERENCE)
+wr_rope0 = RopeAnalysis.get_probs(df, rope=0, reference=REFERENCE)
 
-plot4 = Plots.average_error_barplot(shortfall) + \
-        p9.labs(y='Expected shortfall across all series')
+shortfall = Plots.average_error_barplot(shortfall) + p9.labs(
+    y="Expected shortfall across all series"
+)
 # plot5_0 = Plots.error_dist_by_model(df_m)
-plot5_1 = Plots.error_dist_by_model(df_ranks_m) + \
-          p9.labs(y='Rank distribution', x='')
-plot6_1 = Plots.result_with_rope_bars(wr_rope)
-plot6_2 = Plots.result_with_rope_bars(wr_rope0)
+ranks_dist = Plots.rank_dist_by_model(df_ranks_m) + p9.labs(y="Rank distribution", x="")
+ranks_dist_dataset = Plots.rank_dist_by_model_dataset(
+    df_ranks_m,
+) + p9.labs(y="Rank distribution", x="")
+ranks_dist_dataset_freq = Plots.rank_dist_by_model_dataset(
+    df_ranks_m, "Dataset_Frequency"
+) + p9.labs(y="Rank distribution", x="")
+rope_analysis = Plots.result_with_rope_bars(wr_rope)
+rope_analysis_rope0 = Plots.result_with_rope_bars(wr_rope0)
 
-plot4.save('assets/plots/plot4.pdf', width=5, height=5)
-plot5_1.save('assets/plots/plot5_1.pdf', width=5, height=5)
-plot6_1.save('assets/plots/plot6_1.pdf', width=5, height=5)
-plot6_2.save('assets/plots/plot6_2.pdf', width=5, height=5)
+shortfall.save("assets/plots/overall_shortfall.pdf", width=5, height=5)
+ranks_dist.save("assets/plots/ranks_dist.pdf", width=5, height=5)
+ranks_dist_dataset.save("assets/plots/ranks_dist_dataset.pdf", width=5, height=5)
+ranks_dist_dataset_freq.save(
+    "assets/plots/ranks_dist_dataset_freq.pdf", width=5, height=5
+)
+rope_analysis.save("assets/plots/rope_analysis.pdf", width=5, height=5)
+rope_analysis_rope0.save("assets/plots/rope_analysis_rope0.pdf", width=5, height=5)

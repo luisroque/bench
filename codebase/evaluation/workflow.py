@@ -1,4 +1,5 @@
 import typing
+import os
 
 import numpy as np
 import pandas as pd
@@ -26,26 +27,22 @@ class EvaluationWorkflow:
     ]
     ORIGINAL_FEATURES = ["is_anomaly", "horizon", "unique_id", "freq"]
 
-    def __init__(self, cv: pd.DataFrame, baseline: str):
+    def __init__(self, baseline: str, datasets: typing.List[str]):
         self.func = smape
+        self.datasets = datasets
 
         self.baseline = baseline
-        self.cv = cv
         self.hard_thr = -1
         self.hard_series = []
         self.hard_scores = pd.DataFrame()
         self.error_on_hard = pd.DataFrame()
 
+        self.cv = self.read_all_results()
         self.map_forecasting_horizon_col()
         self.models = self.get_model_names()
 
-    def eval_by_horizon_full(self, cv_: typing.Optional[pd.DataFrame] = None):
-        if cv_ is None:
-            cv = self.cv.copy()
-        else:
-            cv = cv_.copy()
-
-        cv_g = cv.groupby("freq")
+    def eval_by_horizon_full(self):
+        cv_g = self.cv.groupby("freq")
         results_by_g = {}
         for g, df in cv_g:
             fh = df["horizon"].sort_values().unique()
@@ -78,8 +75,8 @@ class EvaluationWorkflow:
         first_h_df = pd.concat(first_horizon, axis=1).T
         last_h_df = pd.concat(last_horizon, axis=1).T
 
-        errf_df = self.run(first_h_df, return_df=True)
-        errl_df = self.run(last_h_df, return_df=True)
+        errf_df = self.run(first_h_df)
+        errl_df = self.run(last_h_df)
         err_df = errf_df.merge(errl_df, on="Model")
         err_df.columns = ["Model", "First horizon", "Last horizon"]
 
@@ -88,29 +85,32 @@ class EvaluationWorkflow:
 
         return err_melted_df
 
-    def eval_by_series(self, cv_: typing.Optional[pd.DataFrame] = None):
-        if cv_ is None:
-            cv = self.cv.copy()
-        else:
-            cv = cv_.copy()
+    def eval_by_series(self):
+        cv_group = self.cv.groupby("unique_id")
 
-        cv_group = cv.groupby("unique_id")
+        dataset_names = "_".join(self.datasets)
+        output_path = f"./assets/metrics/by_series/{dataset_names}_error_by_series.csv"
+
+        if os.path.exists(output_path):
+            print(f"File {output_path} already exists. Loading existing data.")
+            return pd.read_csv(output_path)
 
         results_by_series = {}
-        for g, df in cv_group:
+        total_groups = len(cv_group)
+        for i, (g, df) in enumerate(cv_group, start=1):
             results_by_series[g] = self.run(df)
+            if i % 100 == 0 or i == total_groups:
+                print(f"Processed {i}/{total_groups} series")
 
-        results_df = pd.concat(results_by_series, axis=1).T
+        results_df = pd.concat(
+            {k: df for k, df in results_by_series.items()}, names=["Series"]
+        ).reset_index(level=0)
 
+        results_df.to_csv(output_path, index=False)
         return results_df
 
-    def eval_by_anomalies(self, cv_: typing.Optional[pd.DataFrame] = None):
-        if cv_ is None:
-            cv = self.cv.copy()
-        else:
-            cv = cv_.copy()
-
-        cv_group = cv.groupby("unique_id")
+    def eval_by_anomalies(self):
+        cv_group = self.cv.groupby("unique_id")
 
         results_by_series, cv_df = {}, []
         for g, df in cv_group:
@@ -127,13 +127,8 @@ class EvaluationWorkflow:
 
         return results_df, result_all
 
-    def eval_by_anomalous_series(self, cv_: typing.Optional[pd.DataFrame] = None):
-        if cv_ is None:
-            cv = self.cv.copy()
-        else:
-            cv = cv_.copy()
-
-        cv_group = cv.groupby("unique_id")
+    def eval_by_anomalous_series(self):
+        cv_group = self.cv.groupby("unique_id")
 
         results_by_series, cv_df = {}, []
         for g, df in cv_group:
@@ -150,49 +145,62 @@ class EvaluationWorkflow:
 
     @staticmethod
     def get_expected_shortfall(df, thr=0.9):
-        sf = df.apply(lambda x: x[x > x.quantile(thr)].mean())
-        sf = sf.reset_index()
-        sf.columns = ["Model", "Error"]
+        output_dir = "./assets/metrics/by_group/"
+        os.makedirs(output_dir, exist_ok=True)
 
-        return sf
+        # get the dataset
+        df["Dataset"] = df["Series"].str.extract(r"([a-zA-Z0-9]+)")
+        df["Dataset_Frequency"] = df["Series"].str.extract(
+            r"([a-zA-Z0-9]+_[a-zA-Z0-9])"
+        )
 
-    def eval_by_frequency(
-        self, cv_: typing.Optional[pd.DataFrame] = None, long_format: bool = False
-    ):
-        if cv_ is None:
-            cv = self.cv.copy()
-        else:
-            cv = cv_.copy()
+        dataset_names = "_".join(df["Dataset"].unique())
+        output_path = os.path.join(
+            output_dir, f"{dataset_names}_expected_shortfall.csv"
+        )
 
-        cv_group = cv.groupby("freq")
+        if os.path.exists(output_path):
+            print(f"File {output_path} already exists. Loading existing data.")
+            return pd.read_csv(output_path)
+
+        # calculate the 95th percentile for each Dataset and Model combination
+        percentile_95 = (
+            df.groupby(["Dataset", "Model"])["Error"].quantile(thr).reset_index()
+        )
+
+        df = df.merge(percentile_95, on=["Dataset", "Model"])
+        df = df.rename(columns={"Error_x": "Error", "Error_y": "95th Percentile"})
+
+        worst_5_percent = df[df["Error"] >= df["95th Percentile"]]
+        worst_5_percent = worst_5_percent.drop(columns=["95th Percentile"])
+
+        shortfall = worst_5_percent.groupby(["Model"])["Error"].mean().reset_index()
+        shortfall.to_csv(output_path, index=False)
+
+        return shortfall
+
+    def eval_by_frequency(self):
+        cv_group = self.cv.groupby("freq")
 
         results_by_freq = {}
         for g, df in cv_group:
             results_by_freq[g] = self.run(df)
 
-        results_df = pd.concat(results_by_freq, axis=1)
-
-        if long_format:
-            results_df = results_df.reset_index().melt("index")
-            results_df.columns = ["Model", "Frequency", "Error"]
-
+        results_df = pd.concat(
+            {k: df for k, df in results_by_freq.items()}, names=["Frequency"]
+        ).reset_index(level=0)
         return results_df
 
-    def run(self, cv_: typing.Optional[pd.DataFrame] = None, return_df: bool = False):
-        if cv_ is None:
-            cv = self.cv.copy()
-        else:
-            cv = cv_.copy()
-
+    def run(self, cv: typing.Optional[pd.DataFrame] = None) -> pd.DataFrame:
+        if cv is None or cv.empty:
+            cv = self.cv
         evaluation = {}
         for model in self.models:
             evaluation[model] = self.func(y=cv["y"], y_hat=cv[model])
 
         evaluation = pd.Series(evaluation)
-
-        if return_df:
-            evaluation = evaluation.reset_index()
-            evaluation.columns = ["Model", "Error"]
+        evaluation = evaluation.reset_index()
+        evaluation.columns = ["Model", "Error"]
 
         return evaluation
 
@@ -233,11 +241,9 @@ class EvaluationWorkflow:
 
         self.cv = self.cv.merge(horizon, on=["unique_id", "ds"])
 
-    @classmethod
-    def read_all_results(cls, dataset_list=None):
+    def read_all_results(self):
 
-        if dataset_list is None:
-            dataset_list = DATASETS
+        dataset_list = self.datasets
 
         results = []
         for ds in dataset_list:
@@ -246,7 +252,7 @@ class EvaluationWorkflow:
                 print(group)
 
                 try:
-                    group_df = pd.read_csv(f"{cls.RESULTS_DIR}/{ds}_{group}_all.csv")
+                    group_df = pd.read_csv(f"{self.RESULTS_DIR}/{ds}_{group}_all.csv")
                 except FileNotFoundError:
                     continue
 
@@ -281,14 +287,20 @@ class EvaluationWorkflow:
                 "AutoETS": "ETS",
                 "SESOpt": "SES",
                 "AutoTheta": "Theta",
+                "CrostonOptimized": "Croston",
             }
         )
 
         return results_df
 
     @staticmethod
-    def melt_data_by_series(df: pd.DataFrame):
-        df_melted = df.melt()
-        df_melted.columns = ["Model", "Error"]
+    def error_by_model(df: pd.DataFrame):
+        df_output = df.groupby("Model")["Error"].mean().reset_index()
 
-        return df_melted
+        return df_output
+
+    @staticmethod
+    def rank_by_model(df: pd.DataFrame):
+        df["Rank"] = df.groupby("Series")["Error"].rank(method="average")
+
+        return df

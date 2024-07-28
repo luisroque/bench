@@ -6,9 +6,13 @@ from codebase.load_data.config import DATASETS
 datasets = {
     "Tourism": ["Monthly", "Quarterly"],
     "M3": ["Monthly", "Quarterly", "Yearly"],
-    # "M4": ["Monthly", "Quarterly", "Yearly"],
+    "M4": ["Monthly", "Quarterly", "Yearly"],
     # "M5": ["Daily"],
 }
+
+cv_neural = pd.read_csv(
+    "./assets/results/by_group/{}_{}_neural.csv".format("Tourism", "Quarterly")
+)
 
 for data_name, groups in datasets.items():
     for group in groups:
@@ -21,8 +25,17 @@ for data_name, groups in datasets.items():
         cv_cls = pd.read_csv(INPUT_CLS.format(data_name, group))
         cv_neural = pd.read_csv(INPUT_NEURAL.format(data_name, group))
 
-        # TODO: remove this line and re-run neural predictions with unique_id
-        cv_neural["unique_id"] = cv_cls["unique_id"]
+        # Remove 'Auto' from all algorithm names and drop the quantiles from DeepAR
+        new_columns = []
+        for col in cv_neural.columns:
+            if col.startswith("AutoDeepAR") and (
+                "median" in col or "lo-" in col or "hi-" in col
+            ):
+                continue
+            new_columns.append(col)
+
+        cv_neural = cv_neural[new_columns]
+        cv_neural.columns = cv_neural.columns.str.replace("Auto", "")
 
         cv = cv_cls.merge(
             cv_neural.drop(columns=["y"]), how="left", on=["unique_id", "ds", "cutoff"]
@@ -35,6 +48,6 @@ for data_name, groups in datasets.items():
         cv.to_csv(output_file, index=False)
 
         print(cv.isna().mean())
-        print(smape(cv["y"], cv["AutoNBEATS"]))
+        print(smape(cv["y"], cv["NBEATS"]))
         print(smape(cv["y"], cv["SeasonalNaive"]))
         print(smape(cv["y"], cv["AutoTheta"]))

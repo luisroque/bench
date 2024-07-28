@@ -163,3 +163,4 @@ cython_debug/
 **logs/
 datasets/
 assets/
+.DS_Store

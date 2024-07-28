@@ -13,38 +13,44 @@ class RopeAnalysis:
         return left, mid, right
 
     @classmethod
-    def get_probs(cls,
-                  results: pd.DataFrame,
-                  rope: float,
-                  reference: str):
+    def get_probs(cls, results: pd.DataFrame, rope: float, reference: str):
         results_pd = cls.calc_percentage_diff(results, reference)
 
         prob_df = results_pd.apply(lambda x: cls.get_vector_probs(x, rope=rope), axis=0)
         prob_df = prob_df.T.reset_index()
 
-        outcome_names = [f'{reference} loses', 'draw', f'{reference} wins']
+        outcome_names = [f"{reference} loses", "draw", f"{reference} wins"]
 
-        prob_df.columns = ['Method'] + outcome_names
+        prob_df.columns = ["Method"] + outcome_names
 
         loc = prob_df.query(f'Method=="{reference}"').index[0]
 
         prob_df = prob_df.drop(loc).reset_index(drop=True)
 
-        df_melted = prob_df.melt('Method')
-        df_melted['variable'] = pd.Categorical(df_melted['variable'], categories=outcome_names)
+        df_melted = prob_df.melt("Method")
+        df_melted["variable"] = pd.Categorical(
+            df_melted["variable"], categories=outcome_names
+        )
 
-        df_melted.columns = ['Model', 'Result', 'Probability']
+        df_melted.columns = ["Model", "Result", "Probability"]
 
         return df_melted
 
     @classmethod
     def calc_percentage_diff(cls, results: pd.DataFrame, reference: str):
         results_pd = results.copy()
-        for c in results:
-            results_pd[c] = cls.percentage_diff(results[c],
-                                                results[reference])
+        results_pivot = results_pd.pivot(
+            index="Series", columns="Model", values="Error"
+        )
+        if reference not in results_pivot.columns:
+            raise ValueError(
+                f"Reference model '{reference}' not found in the DataFrame columns."
+            )
 
-        return results_pd
+        percentage_diff_df = results_pivot.apply(
+            lambda row: cls.percentage_diff(row, row[reference]), axis=1
+        )
+        return percentage_diff_df
 
     @staticmethod
     def percentage_diff(x, y):
