@@ -34,6 +34,7 @@ class Plots:
         "TiDE": "#ed9121",
         "Informer": "#ed9121",
     }
+    REFERENCE_COLOR = "red"
 
     @staticmethod
     def get_theme():
@@ -67,14 +68,20 @@ class Plots:
         return plot
 
     @classmethod
-    def average_error_barplot(cls, df: pd.DataFrame):
-        df = df.sort_values("Error", ascending=False).reset_index(drop=True)
-        df["Model"] = pd.Categorical(
-            df["Model"].values.tolist(), categories=df["Model"].values.tolist()
-        )
+    def average_error_barplot(
+        cls, df: pd.DataFrame, facet_attribute=None, reference_model=None
+    ):
+        # TODO: check informer values, when N=1 it seems that there is no 1st place rank, it might be a bug
+        n1_sorted = df[df["n"] == 1].sort_values(by="Rank", ascending=False)
+        model_order = n1_sorted["Model"].unique()
+        df["Model"] = pd.Categorical(df["Model"], categories=model_order, ordered=True)
+
+        color_map = cls.COLOR_MAP.copy()
+        if reference_model:
+            color_map[reference_model] = cls.REFERENCE_COLOR
 
         plot = (
-            p9.ggplot(data=df, mapping=p9.aes(x="Model", y="Error", fill="Model"))
+            p9.ggplot(data=df, mapping=p9.aes(x="Model", y="Rank", fill="Model"))
             + p9.geom_bar(
                 position="dodge",
                 stat="identity",
@@ -86,11 +93,14 @@ class Plots:
                 axis_title_y=p9.element_text(size=7),
                 axis_text_x=p9.element_text(size=9),
             )
-            + p9.scale_fill_manual(values=cls.COLOR_MAP)
+            + p9.scale_fill_manual(values=color_map)
             + p9.labs(x="", y="Error across all series")
             + p9.coord_flip()
             + p9.guides(fill=None)
         )
+
+        if facet_attribute and facet_attribute in df.columns:
+            plot += p9.facet_wrap(f"~ {facet_attribute}", scales="free")
 
         return plot
 

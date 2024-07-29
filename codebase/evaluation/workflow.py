@@ -365,7 +365,7 @@ class EvaluationWorkflow:
 
         return df
 
-    def avg_rank_n_datasets(
+    def avg_rank_n_datasets_random(
         self, df: pd.DataFrame, N: typing.List[int], sample_count: int
     ):
         output_dir = "./assets/metrics/by_n/"
@@ -384,10 +384,19 @@ class EvaluationWorkflow:
         output_path_by_n = os.path.join(
             output_dir, f"{dataset_names}_avg_rank_by_n.csv"
         )
+        output_path_by_n_by_series = os.path.join(
+            output_dir, f"{dataset_names}_avg_rank_by_n_by_series.csv"
+        )
 
-        if os.path.exists(output_path_by_n):
-            print(f"File {output_path_by_n} already exists. Loading existing data.")
-            return pd.read_csv(output_path_by_n)
+        if os.path.exists(output_path_by_n) and os.path.exists(
+            output_path_by_n_by_series
+        ):
+            print(
+                f"File {output_path_by_n} and {output_path_by_n_by_series} already exists. Loading existing data."
+            )
+            return pd.read_csv(output_path_by_n), pd.read_csv(
+                output_path_by_n_by_series
+            )
 
         all_results = []
         for count in range(1, sample_count + 1):
@@ -408,6 +417,9 @@ class EvaluationWorkflow:
                 all_results.append(filtered_df)
 
         final_results_df = pd.concat(all_results, ignore_index=True)
+        final_results_df["Selected_Datasets"] = final_results_df[
+            "Selected_Datasets"
+        ].apply(tuple)
         final_results_df.to_csv(output_path_raw, index=False)
         print(f"Storing RAW avg ranks for n datasets on {output_path_raw}")
 
@@ -416,9 +428,74 @@ class EvaluationWorkflow:
         avg_by_n_datasets.to_csv(output_path_by_n, index=False)
         print(f"Storing avg ranks for n datasets on {output_path_by_n}")
 
-        return avg_by_n_datasets
+        # Computing variance of the mean rank by samples for each N datasets that we random sample
+        avg_by_n_datasets_by_series = self._compute_avg_rank_n_datasets_by_series(
+            final_results_df
+        )
+        avg_by_n_datasets_by_series.to_csv(output_path_by_n_by_series, index=False)
+        print(
+            f"Storing avg ranks for n datasets BY series on {output_path_by_n_by_series}"
+        )
+
+        return avg_by_n_datasets, avg_by_n_datasets_by_series
+
+    def avg_rank_n_datasets(self, df: pd.DataFrame, reference_model: str):
+        output_dir = "./assets/metrics/by_n/"
+        os.makedirs(output_dir, exist_ok=True)
+
+        # get the dataset
+        df["Dataset"] = df["Series"].str.extract(r"([a-zA-Z0-9]+)")
+        df["Dataset_Frequency"] = df["Series"].str.extract(
+            r"([a-zA-Z0-9]+_[a-zA-Z0-9])"
+        )
+
+        dataset_names = "_".join(df["Dataset"].unique())
+        input_path_raw = os.path.join(
+            output_dir, f"{dataset_names}_raw_avg_rank_n_datasets.csv"
+        )
+
+        if os.path.exists(input_path_raw):
+            print(f"File {input_path_raw} already exists. Loading existing data.")
+            raw_data = pd.read_csv(input_path_raw)
+        grouped_by_experiment = (
+            raw_data.groupby(["Model", "n", "Sample_Count", "Selected_Datasets"])[
+                "Error"
+            ]
+            .mean()
+            .reset_index(name="Error")
+        )
+        grouped_by_experiment["Rank"] = grouped_by_experiment.groupby(
+            ["n", "Sample_Count", "Selected_Datasets"]
+        )["Error"].rank(method="min", ascending=True)
+        min_ranks = (
+            grouped_by_experiment.groupby(["Model", "n"])["Rank"].min().reset_index()
+        )
+        min_ranks = pd.merge(
+            min_ranks, grouped_by_experiment, on=["Model", "n", "Rank"]
+        )
+        min_ranks.rename(columns={"Rank": "Min_Rank"}, inplace=True)
+        criteria = min_ranks[min_ranks.Model == reference_model][
+            ["n", "Sample_Count", "Selected_Datasets"]
+        ]
+        reference_model_results = grouped_by_experiment.merge(
+            criteria, on=["n", "Sample_Count", "Selected_Datasets"], how="inner"
+        )
+
+        return reference_model_results
 
     def _compute_avg_rank_n_datasets(self, df):
+        grouped_by_experiment = (
+            df.groupby(["Model", "n", "Sample_Count", "Selected_Datasets"])["Error"]
+            .mean()
+            .reset_index(name="Error")
+        )
+        grouped_by_experiment["Rank"] = grouped_by_experiment.groupby(
+            ["n", "Sample_Count", "Selected_Datasets"]
+        )["Error"].rank(method="min", ascending=True)
+
+        return grouped_by_experiment
+
+    def _compute_avg_rank_n_datasets_by_series(self, df):
         df["Selected_Datasets"] = df["Selected_Datasets"].apply(tuple)
         grouped_by_experiment = (
             df.groupby(["Model", "n", "Sample_Count", "Selected_Datasets"])["Rank"]
