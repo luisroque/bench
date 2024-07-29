@@ -18,6 +18,9 @@ datasets = {
     "M5": ["Daily"],
 }
 
+# TODO: add capability to run neural for a specific algorithm and then merge it to the neural results
+# Run all datasets with NHITS
+
 for data_name, groups in datasets.items():
     for group in groups:
         data_cls = DATASETS[data_name]

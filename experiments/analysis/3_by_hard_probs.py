@@ -8,69 +8,51 @@ from codebase.evaluation.plotting import Plots
 
 ROPE = 5
 LOG = False
+REFERENCE = "DeepAR"
 
-results_df = EvaluationWorkflow.read_all_results(['M3', 'Tourism', 'M4'])
-
-eval_wf = EvaluationWorkflow(results_df,
-                             baseline='SNaive',
-                             reference='NHITS')
+eval_wf = EvaluationWorkflow(datasets=["M3", "Tourism", "M4"], baseline="SNaive")
 
 df_all = eval_wf.eval_by_series()
-df = eval_wf.get_hard_series(df_all)
+df_hard, df_hard_thr = eval_wf.get_hard_series(df_all)
 
-shortfall = eval_wf.get_expected_shortfall(df, 0.95)
+shortfall = eval_wf.get_expected_shortfall(df_all, 0.95)
 
 if LOG:
-    df = LogTransformation.transform(df)
+    df = LogTransformation.transform(df_hard)
 
-df_m = eval_wf.melt_data_by_series(df)
-df_ranks_m = eval_wf.melt_data_by_series(df.rank(axis=1))
+df_m = eval_wf.error_by_model(df_all)
+df_ranks_m = eval_wf.rank_by_model(df_all)
 
-# df_all.rank(axis=1).mean().sort_values()
-# df_all.rank(axis=1).std()
-# (df_all.rank(axis=1) < 2).mean()
-#
-# added_error = []
-# for i, r in df_all.iterrows():
-#     # print(i)
-#     ranks = r.rank()
-#     try:
-#         best_mod = ranks[ranks < 2].index[0]
-#
-#         extra_err = r - r[best_mod]
-#         # extra_err = 100 * ((r - r[best_mod]) / r[best_mod])
-#
-#         added_error.append(extra_err)
-#     except IndexError:
-#         continue
-#
-# added_error_df = pd.concat(added_error, axis=1).T
-# added_error_df.mean()
-#
+wr_rope = RopeAnalysis.get_probs(df_all, rope=ROPE, reference=REFERENCE)
+wr_rope0 = RopeAnalysis.get_probs(df_all, rope=0, reference=REFERENCE)
 
+error_dist_baseline = Plots.error_distribution_baseline(
+    df=df_all,
+    baseline=eval_wf.baseline,
+    thr=df_all[df_all.Model == eval_wf.baseline]["Error"].quantile(0.95),
+)
+error_hard_series = Plots.average_error_barplot(df_hard) + p9.labs(
+    y="SMAPE on difficult series"
+)
 
-wr_rope = RopeAnalysis.get_probs(df, rope=ROPE, reference=eval_wf.reference)
-wr_rope0 = RopeAnalysis.get_probs(df, rope=0, reference=eval_wf.reference)
+shortfall_hard_series = Plots.average_error_barplot(shortfall) + p9.labs(
+    y="Expected shortfall on difficult series"
+)
+rank_dist_hard_series = Plots.rank_dist_by_model(df_ranks_m) + p9.labs(
+    y="Rank distribution on difficult series", x=""
+)
+rank_dist_hard_series_dataset_freq = Plots.rank_dist_by_model_dataset(
+    df_ranks_m, "Dataset_Frequency"
+) + p9.labs(y="Rank distribution on difficult series", x="")
+rope_hard_series = Plots.result_with_rope_bars(wr_rope)
+rope0_hard_series = Plots.result_with_rope_bars(wr_rope0)
 
-df_avg = df.mean().reset_index()
-df_avg.columns = ['Model', 'Error']
-
-plot7_0 = Plots.error_distribution_baseline(df=df_all,
-                                            baseline='SNaive',
-                                            thr=eval_wf.hard_thr)
-plot7 = Plots.average_error_barplot(df_avg) + \
-        p9.labs(y='SMAPE on difficult series')
-
-plot8 = Plots.average_error_barplot(shortfall) + \
-        p9.labs(y='Expected shortfall on difficult series')
-# plot2 = Plots.error_dist_by_model(df_m)
-plot9 = Plots.error_dist_by_model(df_ranks_m) + \
-        p9.labs(y='Rank distribution on difficult series', x='')
-plot10a = Plots.result_with_rope_bars(wr_rope)
-plot10b = Plots.result_with_rope_bars(wr_rope0)
-
-plot7_0.save('assets/plots/plot7_0.pdf', width=9, height=5)
-plot7.save('assets/plots/plot7.pdf', width=5, height=5)
-plot8.save('assets/plots/plot8.pdf', width=5, height=5)
-plot10a.save('assets/plots/plot10a.pdf', width=5, height=5)
-plot10b.save('assets/plots/plot10b.pdf', width=5, height=5)
+error_dist_baseline.save("assets/plots/error_dist_baseline.pdf", width=9, height=5)
+error_hard_series.save("assets/plots/error_hard_series.pdf", width=5, height=5)
+shortfall_hard_series.save("assets/plots/shortfall_hard_series.pdf", width=5, height=5)
+rank_dist_hard_series.save("assets/plots/rank_dist_hard_series.pdf", width=5, height=5)
+rank_dist_hard_series_dataset_freq.save(
+    "assets/plots/rank_dist_hard_series_dataset_freq.pdf", width=5, height=5
+)
+rope_hard_series.save("assets/plots/rope_hard_series.pdf", width=5, height=5)
+rope0_hard_series.save("assets/plots/rope0_hard_series.pdf", width=5, height=5)

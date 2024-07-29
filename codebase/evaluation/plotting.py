@@ -53,9 +53,11 @@ class Plots:
 
     @staticmethod
     def error_distribution_baseline(df: pd.DataFrame, baseline: str, thr: float):
+        df_baseline = df[df["Model"] == baseline]
+
         plot = (
-            p9.ggplot(df)
-            + p9.aes(x=baseline)
+            p9.ggplot(df_baseline)
+            + p9.aes(x="Error")
             + p9.geom_histogram(alpha=0.95, bins=30, color="black", fill="#69a765")
             + Plots.get_theme()
             + p9.geom_vline(xintercept=thr, colour="red", size=1)

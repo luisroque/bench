@@ -37,8 +37,8 @@ class EvaluationWorkflow:
         self.hard_scores = pd.DataFrame()
         self.error_on_hard = pd.DataFrame()
 
-        self.cv = self.read_all_results()
-        self.map_forecasting_horizon_col()
+        self.cv = None
+        self.read_all_results()
         self.models = self.get_model_names()
 
     def eval_by_horizon_full(self):
@@ -88,6 +88,9 @@ class EvaluationWorkflow:
     def eval_by_series(self):
         cv_group = self.cv.groupby("unique_id")
 
+        output_dir = "./assets/metrics/by_series/"
+        os.makedirs(output_dir, exist_ok=True)
+
         dataset_names = "_".join(self.datasets)
         output_path = f"./assets/metrics/by_series/{dataset_names}_error_by_series.csv"
 
@@ -107,6 +110,7 @@ class EvaluationWorkflow:
         ).reset_index(level=0)
 
         results_df.to_csv(output_path, index=False)
+        print(f"Storing eval by series on {output_path}")
         return results_df
 
     def eval_by_anomalies(self):
@@ -176,6 +180,7 @@ class EvaluationWorkflow:
 
         shortfall = worst_5_percent.groupby(["Model"])["Error"].mean().reset_index()
         shortfall.to_csv(output_path, index=False)
+        print(f"Storing shortfall on {output_path}")
 
         return shortfall
 
@@ -206,15 +211,55 @@ class EvaluationWorkflow:
 
     def get_hard_series(self, error_by_unique_id: pd.DataFrame):
 
-        assert self.baseline in self.cv.columns
+        output_dir = "./assets/metrics/by_group/"
+        os.makedirs(output_dir, exist_ok=True)
 
-        self.hard_thr = error_by_unique_id[self.baseline].quantile(0.95)
-        self.hard_series = error_by_unique_id.loc[
-            error_by_unique_id[self.baseline] > self.hard_thr, :
-        ].index.tolist()
-        error_on_hard = error_by_unique_id.loc[self.hard_series, :]
+        error_by_unique_id["Dataset"] = error_by_unique_id["Series"].str.extract(
+            r"([a-zA-Z0-9]+)"
+        )
+        error_by_unique_id["Dataset_Frequency"] = error_by_unique_id[
+            "Series"
+        ].str.extract(r"([a-zA-Z0-9]+_[a-zA-Z0-9])")
 
-        return error_on_hard
+        dataset_names = "_".join(error_by_unique_id["Dataset"].unique())
+
+        output_path = os.path.join(output_dir, f"{dataset_names}_hard_series.csv")
+        output_path_thr = os.path.join(
+            output_dir, f"{dataset_names}_hard_series_thr.csv"
+        )
+
+        if os.path.exists(output_path):
+            print(f"File {output_path} already exists. Loading existing data.")
+            return pd.read_csv(output_path), pd.read_csv(output_path_thr)
+
+        snaive_error = error_by_unique_id[error_by_unique_id.Model == self.baseline]
+
+        percentile_95_baseline = (
+            snaive_error.groupby(["Dataset_Frequency"])["Error"]
+            .quantile(0.95)
+            .reset_index()
+        )
+
+        error_by_unique_id = error_by_unique_id.merge(
+            percentile_95_baseline, on=["Dataset_Frequency"]
+        )
+        error_by_unique_id = error_by_unique_id.rename(
+            columns={"Error_x": "Error", "Error_y": f"95th Percentile {self.baseline}"}
+        )
+
+        hard_series = error_by_unique_id[
+            error_by_unique_id["Error"]
+            >= error_by_unique_id[f"95th Percentile {self.baseline}"]
+        ]
+        hard_series = hard_series.drop(columns=[f"95th Percentile {self.baseline}"])
+
+        error_on_hard = hard_series.groupby(["Model"])["Error"].mean().reset_index()
+        error_on_hard.to_csv(output_path, index=False)
+        percentile_95_baseline.to_csv(output_path_thr, index=False)
+
+        print(f"Storing error on hard series on {output_path}")
+
+        return error_on_hard, percentile_95_baseline
 
     def get_model_names(self):
         metadata = self.cv.columns.str.contains("|".join(self.ALL_METADATA))
@@ -242,8 +287,19 @@ class EvaluationWorkflow:
         self.cv = self.cv.merge(horizon, on=["unique_id", "ds"])
 
     def read_all_results(self):
-
         dataset_list = self.datasets
+
+        output_dir = "./assets/metrics/all/"
+        os.makedirs(output_dir, exist_ok=True)
+
+        dataset_names = "_".join(dataset_list)
+
+        output_path = os.path.join(output_dir, f"{dataset_names}_all_results.csv")
+
+        if os.path.exists(output_path):
+            print(f"Loading preprocessed data from {output_path}")
+            self.cv = pd.read_csv(output_path)
+            return
 
         results = []
         for ds in dataset_list:
@@ -278,9 +334,7 @@ class EvaluationWorkflow:
             }
         )
 
-        # results_df = results_df.drop(['NHITS'], axis=1)
-        # results_df = results_df.drop(['Ensemble', 'WindowAverage'], axis=1)
-        results_df = results_df.rename(
+        self.cv = results_df.rename(
             columns={
                 "AutoARIMA": "ARIMA",
                 "SeasonalNaive": "SNaive",
@@ -290,8 +344,9 @@ class EvaluationWorkflow:
                 "CrostonOptimized": "Croston",
             }
         )
-
-        return results_df
+        self.map_forecasting_horizon_col()
+        self.cv.to_csv(output_path, index=False)
+        print(f"Storing preprocessed data on {output_path}")
 
     @staticmethod
     def error_by_model(df: pd.DataFrame):
