@@ -1,5 +1,6 @@
 import typing
 import os
+import random
 
 import numpy as np
 import pandas as pd
@@ -356,6 +357,73 @@ class EvaluationWorkflow:
 
     @staticmethod
     def rank_by_model(df: pd.DataFrame):
+        df["Dataset"] = df["Series"].str.extract(r"([a-zA-Z0-9]+)")
+        df["Dataset_Frequency"] = df["Series"].str.extract(
+            r"([a-zA-Z0-9]+_[a-zA-Z0-9])"
+        )
         df["Rank"] = df.groupby("Series")["Error"].rank(method="average")
 
         return df
+
+    def avg_rank_n_datasets(
+        self, df: pd.DataFrame, N: typing.List[int], sample_count: int
+    ):
+        output_dir = "./assets/metrics/by_n/"
+        os.makedirs(output_dir, exist_ok=True)
+
+        # get the dataset
+        df["Dataset"] = df["Series"].str.extract(r"([a-zA-Z0-9]+)")
+        df["Dataset_Frequency"] = df["Series"].str.extract(
+            r"([a-zA-Z0-9]+_[a-zA-Z0-9])"
+        )
+
+        dataset_names = "_".join(df["Dataset"].unique())
+        output_path_raw = os.path.join(
+            output_dir, f"{dataset_names}_raw_avg_rank_n_datasets.csv"
+        )
+        output_path_by_n = os.path.join(
+            output_dir, f"{dataset_names}_avg_rank_by_n.csv"
+        )
+
+        if os.path.exists(output_path_by_n):
+            print(f"File {output_path_by_n} already exists. Loading existing data.")
+            return pd.read_csv(output_path_by_n)
+
+        all_results = []
+        for count in range(1, sample_count + 1):
+            for n in N:
+                datasets = df["Dataset_Frequency"].unique().tolist()
+                selected_datasets = random.sample(datasets, n)
+
+                # Filter the DataFrame to include only rows with selected datasets
+                filtered_df = df[df["Dataset_Frequency"].isin(selected_datasets)].copy()
+
+                # Add new columns for selected datasets, n, and count
+                filtered_df["Selected_Datasets"] = [selected_datasets] * len(
+                    filtered_df
+                )
+                filtered_df["n"] = n
+                filtered_df["Sample_Count"] = count
+
+                all_results.append(filtered_df)
+
+        final_results_df = pd.concat(all_results, ignore_index=True)
+        final_results_df.to_csv(output_path_raw, index=False)
+        print(f"Storing RAW avg ranks for n datasets on {output_path_raw}")
+
+        # Computing variance of the mean rank by samples for each N datasets that we random sample
+        avg_by_n_datasets = self._compute_avg_rank_n_datasets(final_results_df)
+        avg_by_n_datasets.to_csv(output_path_by_n, index=False)
+        print(f"Storing avg ranks for n datasets on {output_path_by_n}")
+
+        return avg_by_n_datasets
+
+    def _compute_avg_rank_n_datasets(self, df):
+        df["Selected_Datasets"] = df["Selected_Datasets"].apply(tuple)
+        grouped_by_experiment = (
+            df.groupby(["Model", "n", "Sample_Count", "Selected_Datasets"])["Rank"]
+            .mean()
+            .reset_index(name="Rank")
+        )
+
+        return grouped_by_experiment
