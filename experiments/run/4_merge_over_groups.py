@@ -7,7 +7,7 @@ datasets = {
     "Tourism": ["Monthly", "Quarterly"],
     "M3": ["Monthly", "Quarterly", "Yearly"],
     "M4": ["Monthly", "Quarterly", "Yearly"],
-    # "M5": ["Daily"],
+    "M5": ["Daily"],
 }
 
 cv_neural = pd.read_csv(

@@ -4,7 +4,7 @@ import plotnine as p9
 from codebase.evaluation.workflow import EvaluationWorkflow
 from codebase.evaluation.plotting import Plots
 
-eval_wf = EvaluationWorkflow(datasets=["M3", "Tourism", "M4"], baseline="SNaive")
+eval_wf = EvaluationWorkflow(datasets=["M3", "Tourism", "M4", "M5"], baseline="SNaive")
 
 error_all = eval_wf.run()
 error_by_freq = eval_wf.eval_by_frequency()

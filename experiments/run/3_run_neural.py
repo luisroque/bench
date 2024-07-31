@@ -4,7 +4,7 @@ from neuralforecast.auto import (
     AutoRNN,
     AutoTCN,
     AutoDeepAR,
-    AutoNBEATS,
+    AutoNHITS,
     AutoTiDE,
     AutoInformer,
 )
@@ -51,7 +51,7 @@ for data_name, groups in datasets.items():
             AutoRNN(h=h, cpus=15, gpus=0),
             AutoTCN(h=h, cpus=15, gpus=0),
             AutoDeepAR(h=h, cpus=15, gpus=0),
-            AutoNBEATS(h=h, cpus=15, gpus=0),
+            AutoNHITS(h=h, cpus=15, gpus=0),
             AutoTiDE(h=h, cpus=15, gpus=0),
             AutoInformer(h=h, cpus=15, gpus=0),
         ]

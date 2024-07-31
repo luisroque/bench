@@ -68,7 +68,35 @@ class Plots:
         return plot
 
     @classmethod
-    def average_error_barplot(
+    def average_error_barplot(cls, df: pd.DataFrame):
+        df = df.sort_values("Error", ascending=False).reset_index(drop=True)
+        df["Model"] = pd.Categorical(
+            df["Model"].values.tolist(), categories=df["Model"].values.tolist()
+        )
+
+        plot = (
+            p9.ggplot(data=df, mapping=p9.aes(x="Model", y="Error", fill="Model"))
+            + p9.geom_bar(
+                position="dodge",
+                stat="identity",
+                width=0.9,
+                # fill='darkgreen'
+            )
+            + Plots.get_theme()
+            + p9.theme(
+                axis_title_y=p9.element_text(size=7),
+                axis_text_x=p9.element_text(size=9),
+            )
+            + p9.scale_fill_manual(values=cls.COLOR_MAP)
+            + p9.labs(x="", y="Error across all series")
+            + p9.coord_flip()
+            + p9.guides(fill=None)
+        )
+
+        return plot
+
+    @classmethod
+    def average_rank_barplot(
         cls, df: pd.DataFrame, facet_attribute=None, reference_model=None
     ):
         # TODO: check informer values, when N=1 it seems that there is no 1st place rank, it might be a bug

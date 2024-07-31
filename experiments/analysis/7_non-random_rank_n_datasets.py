@@ -15,7 +15,7 @@ df_ranks_m = eval_wf.rank_by_model(df)
 for reference_model in REFERENCE_MODELS:
     df_avg_rank_n_datasets = eval_wf.avg_rank_n_datasets(df, reference_model)
 
-    cherry_picking = Plots.average_error_barplot(
+    cherry_picking = Plots.average_rank_barplot(
         df_avg_rank_n_datasets, "n", reference_model
     ) + p9.labs(y="Cherry-Picking Datasets")
 
