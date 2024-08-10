@@ -4,8 +4,8 @@ from datasetsforecast.long_horizon import LongHorizon
 from codebase.load_data.base import LoadDataset
 
 
-class ETTH1Dataset(LoadDataset):
-    DATASET_NAME = "ETTH1"
+class ETTh1Dataset(LoadDataset):
+    DATASET_NAME = "ETTh1"
 
     @classmethod
     def load_data(cls, group):
