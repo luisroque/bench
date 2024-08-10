@@ -18,7 +18,14 @@ datasets = {
     "M5": ["Daily"],
     "Labour": ["Monthly"],
     "Traffic": ["Daily"],
-    "Wiki2": ["Daily"]
+    "Wiki2": ["Daily"],
+    "ETTH1": ["Hourly"],
+    "ETTH2": ["Hourly"],
+    "ETTm1": ["15T"],
+    "ETTm2": ["15T"],
+    "ECL": ["15T"],
+    "TrafficL": ["15T"],
+    "Weather": ["10M"],
 }
 
 for data_name, groups in datasets.items():
