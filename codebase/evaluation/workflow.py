@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from neuralforecast.losses.numpy import mape, mae, smape, rmae
 
-from codebase.load_data.config import DATASETS, N, SAMPLE_COUNT
+from codebase.load_data.config import DATASETS, N, SAMPLE_COUNT, REFERENCE_MODELS
 
 
 class EvaluationWorkflow:
@@ -457,3 +457,27 @@ class EvaluationWorkflow:
         )
 
         return grouped_by_experiment
+
+    def compute_agg_rank(self):
+        all_models = []
+        for model in REFERENCE_MODELS:
+            avg_rank_model = self.avg_rank_n_datasets(model)
+            ranks_reference_model = avg_rank_model.loc[avg_rank_model.Model == model]
+            rank_n_model = avg_rank_model.loc[
+                ranks_reference_model.groupby("n")["Rank"].idxmin()
+            ]
+            all_models.append(rank_n_model)
+        all_models_concat = pd.concat(all_models, ignore_index=True)
+
+        top = {}
+        for i in range(1, 4):
+            top_i = all_models_concat.loc[
+                (all_models_concat["n"] == 1) & (all_models_concat["Rank"] <= i)
+            ]
+            top_i_perc = top_i.shape[0] / len(REFERENCE_MODELS)
+            top[i] = top_i_perc
+
+        top_df = pd.DataFrame(
+            list(top.items()), columns=["Models in Top", "Percentage"]
+        )
+        return top_df

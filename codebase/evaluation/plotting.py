@@ -96,6 +96,54 @@ class Plots:
         return plot
 
     @classmethod
+    def top_barplot(cls, df: pd.DataFrame):
+        df["Percentage"] = df["Percentage"] * 100
+        df = df.sort_values("Models in Top", ascending=False).reset_index(drop=True)
+        df["Models in Top"] = pd.Categorical(
+            df["Models in Top"].values.tolist(),
+            categories=df["Models in Top"].values.tolist(),
+        )
+        plot = (
+            p9.ggplot(
+                data=df,
+                mapping=p9.aes(x="Models in Top", y="Percentage"),
+            )
+            + p9.geom_bar(
+                position="dodge",
+                stat="identity",
+                width=0.5,
+                fill="#69a765",
+            )
+            + p9.geom_text(
+                p9.aes(label=p9.after_stat("y")),
+                position=p9.position_stack(vjust=0.5),
+                color="white",
+                size=8,
+                format_string="{:.0f}%",
+            )
+            + Plots.get_theme()
+            + p9.theme(
+                axis_text_x=p9.element_text(size=10),
+                axis_text_y=p9.element_text(size=10),
+                plot_title=p9.element_text(size=12, weight="bold"),
+                plot_background=p9.element_rect(fill="white"),
+                panel_grid_major=p9.element_line(color="gray", linetype="--", size=0.5),
+                panel_grid_minor=p9.element_line(
+                    color="gray", linetype="--", size=0.25
+                ),
+            )
+            + p9.labs(
+                x="Models in Top X Position",
+                y="Percentage",
+                # title="Percentage of Models in Top Positions",
+            )
+            + p9.coord_flip()
+            + p9.guides(fill=None)
+        )
+
+        return plot
+
+    @classmethod
     def average_rank_n_barplot(
         cls, df: pd.DataFrame, facet_attribute=None, reference_model=None
     ):
