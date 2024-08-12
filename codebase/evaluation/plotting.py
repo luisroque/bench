@@ -30,7 +30,7 @@ class Plots:
         "RNN": "#ed9121",
         "TCN": "#ed9121",
         "DeepAR": "#ed9121",
-        "NBEATS": "#ed9121",
+        "NHITS": "#ed9121",
         "TiDE": "#ed9121",
         "Informer": "#ed9121",
     }
@@ -68,14 +68,14 @@ class Plots:
         return plot
 
     @classmethod
-    def average_error_barplot(cls, df: pd.DataFrame):
-        df = df.sort_values("Error", ascending=False).reset_index(drop=True)
+    def average_rank_barplot(cls, df: pd.DataFrame):
+        df = df.sort_values("Rank", ascending=False).reset_index(drop=True)
         df["Model"] = pd.Categorical(
             df["Model"].values.tolist(), categories=df["Model"].values.tolist()
         )
 
         plot = (
-            p9.ggplot(data=df, mapping=p9.aes(x="Model", y="Error", fill="Model"))
+            p9.ggplot(data=df, mapping=p9.aes(x="Model", y="Rank", fill="Model"))
             + p9.geom_bar(
                 position="dodge",
                 stat="identity",
@@ -88,7 +88,7 @@ class Plots:
                 axis_text_x=p9.element_text(size=9),
             )
             + p9.scale_fill_manual(values=cls.COLOR_MAP)
-            + p9.labs(x="", y="Error across all series")
+            + p9.labs(x="", y="Rank across all datasets")
             + p9.coord_flip()
             + p9.guides(fill=None)
         )
@@ -96,10 +96,9 @@ class Plots:
         return plot
 
     @classmethod
-    def average_rank_barplot(
+    def average_rank_n_barplot(
         cls, df: pd.DataFrame, facet_attribute=None, reference_model=None
     ):
-        # TODO: check informer values, when N=1 it seems that there is no 1st place rank, it might be a bug
         n1_sorted = df[df["n"] == 1].sort_values(by="Rank", ascending=False)
         model_order = n1_sorted["Model"].unique()
         df["Model"] = pd.Categorical(df["Model"], categories=model_order, ordered=True)
@@ -133,34 +132,47 @@ class Plots:
         return plot
 
     @classmethod
-    def average_error_by_freq(cls, df: pd.DataFrame):
-        # avg_error = df.groupby('Model')['Error'].mean()
-        # order = avg_error.sort_values(ascending=True).index.tolist()
-        # df["Model"] = pd.Categorical(df["Model"], categories=cls.ORDER[::-1])
-        df_sorted = df.sort_values(by=["Frequency", "Error"]).reset_index(drop=True)
+    def average_rank_boxplot(cls, df: pd.DataFrame):
+        model_medians = (
+            df.groupby("Model")["Rank"]
+            .median()
+            .sort_values(ascending=False)
+            .reset_index()
+        )
+        df_sorted = df.copy()
+        df_sorted["Model"] = pd.Categorical(
+            df_sorted["Model"], categories=model_medians["Model"].unique(), ordered=True
+        )
+        df_sorted = df_sorted.sort_values(["Model", "Rank"], ascending=[True, False])
+
+        plot = (
+            p9.ggplot(data=df_sorted, mapping=p9.aes(x="Model", y="Rank", fill="Model"))
+            + p9.geom_boxplot()
+            + Plots.get_theme()
+            + p9.theme(
+                axis_title_y=p9.element_text(size=7),
+                axis_text_x=p9.element_text(size=9),
+            )
+            + p9.scale_fill_manual(values=cls.COLOR_MAP)
+            + p9.labs(x="", y="Rank across all datasets")
+            + p9.coord_flip()
+            + p9.guides(fill=None)
+        )
+
+        return plot
+
+    @classmethod
+    def average_rank_by_freq(cls, df: pd.DataFrame):
+        df_sorted = df.sort_values(by=["Frequency", "Rank"]).reset_index(drop=True)
 
         df_sorted["Model"] = pd.Categorical(
             df_sorted["Model"], categories=df_sorted["Model"].unique(), ordered=True
         )
 
-        # plot = \
-        #     p9.ggplot(data=df,
-        #               mapping=p9.aes(x='Frequency',
-        #                              y='Error',
-        #                              group='Model',
-        #                              fill='Model')) + \
-        #     p9.facet_grid('~Frequency') + \
-        #     p9.geom_bar(position='dodge',
-        #                 stat='identity',  # color='Color',
-        #                 width=0.9) + \
-        #     Plots.get_theme() + \
-        #     p9.labs(x='Sampling frequency', y='Error') + \
-        #     p9.scale_fill_manual(values=COLOR_MAP)
-
         plot = (
             p9.ggplot(
                 data=df_sorted,
-                mapping=p9.aes(x="Model", y="Error", group="Frequency", fill="Model"),
+                mapping=p9.aes(x="Model", y="Rank", group="Frequency", fill="Model"),
             )
             + p9.facet_grid("~Frequency")
             + p9.geom_bar(position="dodge", stat="identity", width=0.9)
@@ -169,7 +181,100 @@ class Plots:
                 axis_text_x=p9.element_text(angle=60, size=7),
                 strip_text=p9.element_text(size=10),
             )
-            + p9.labs(x="", y="SMAPE")
+            + p9.labs(x="", y="Rank")
+            + p9.scale_fill_manual(values=cls.COLOR_MAP)
+            + p9.guides(fill=None)
+        )
+
+        return plot
+
+    @classmethod
+    def average_rank_by_freq_boxplot(cls, df: pd.DataFrame):
+        model_medians = (
+            df.groupby("Model")["Rank"]
+            .median()
+            .sort_values(ascending=True)
+            .reset_index()
+        )
+        df_sorted = df.copy()
+        df_sorted["Model"] = pd.Categorical(
+            df_sorted["Model"], categories=model_medians["Model"].unique(), ordered=True
+        )
+        df_sorted = df_sorted.sort_values(["Model", "Rank"], ascending=[True, False])
+
+        plot = (
+            p9.ggplot(
+                data=df_sorted,
+                mapping=p9.aes(x="Model", y="Rank", fill="Model"),
+            )
+            + p9.facet_grid("~Frequency")
+            + p9.geom_boxplot()
+            + Plots.get_theme()
+            + p9.theme(
+                axis_text_x=p9.element_text(angle=60, size=7),
+                strip_text=p9.element_text(size=10),
+            )
+            + p9.labs(x="", y="Rank")
+            + p9.scale_fill_manual(values=cls.COLOR_MAP)
+            + p9.guides(fill=None)
+        )
+
+        return plot
+
+    @classmethod
+    def average_rank_by_dataset(cls, df: pd.DataFrame):
+        df_sorted = df.sort_values(by=["Dataset", "Rank"]).reset_index(drop=True)
+
+        df_sorted["Model"] = pd.Categorical(
+            df_sorted["Model"], categories=df_sorted["Model"].unique(), ordered=True
+        )
+
+        plot = (
+            p9.ggplot(
+                data=df_sorted,
+                mapping=p9.aes(x="Model", y="Rank", group="Dataset", fill="Model"),
+            )
+            + p9.facet_grid("~Dataset")
+            + p9.geom_bar(position="dodge", stat="identity", width=0.9)
+            + Plots.get_theme()
+            + p9.theme(
+                axis_text_x=p9.element_text(angle=60, size=7),
+                strip_text=p9.element_text(size=10),
+            )
+            + p9.labs(x="", y="Rank")
+            + p9.scale_fill_manual(values=cls.COLOR_MAP)
+            + p9.guides(fill=None)
+        )
+
+        return plot
+
+    @classmethod
+    def average_rank_by_dataset_boxplot(cls, df: pd.DataFrame):
+        model_medians = (
+            df.groupby("Model")["Rank"]
+            .median()
+            .sort_values(ascending=True)
+            .reset_index()
+        )
+        df_sorted = df.copy()
+        df_sorted["Model"] = pd.Categorical(
+            df_sorted["Model"], categories=model_medians["Model"].unique(), ordered=True
+        )
+        df_sorted = df_sorted.sort_values(["Model", "Rank"], ascending=[True, False])
+
+        plot = (
+            p9.ggplot(
+                data=df_sorted,
+                mapping=p9.aes(x="Model", y="Rank", fill="Model"),
+            )
+            + p9.facet_grid("~Dataset")
+            + p9.geom_boxplot()
+            + Plots.get_theme()
+            + p9.theme(
+                axis_text_x=p9.element_text(angle=60, size=7),
+                strip_text=p9.element_text(size=10),
+            )
+            + p9.labs(x="", y="Rank")
             + p9.scale_fill_manual(values=cls.COLOR_MAP)
             + p9.guides(fill=None)
         )
@@ -196,8 +301,8 @@ class Plots:
         return plot
 
     @classmethod
-    def average_error_by_horizons(cls, df: pd.DataFrame):
-        df_sorted = df.sort_values(by=["Horizon", "Error"]).reset_index(drop=True)
+    def average_rank_by_horizons(cls, df: pd.DataFrame):
+        df_sorted = df.sort_values(by=["Horizon", "Rank"]).reset_index(drop=True)
 
         df_sorted["Model"] = pd.Categorical(
             df_sorted["Model"], categories=df_sorted["Model"].unique(), ordered=True
@@ -206,7 +311,7 @@ class Plots:
         plot = (
             p9.ggplot(
                 data=df_sorted,
-                mapping=p9.aes(x="Model", y="Error", group="Horizon", fill="Model"),
+                mapping=p9.aes(x="Model", y="Rank", group="Horizon", fill="Model"),
             )
             + p9.facet_grid("~Horizon")
             + p9.geom_bar(position="dodge", stat="identity", width=0.9)
@@ -215,7 +320,40 @@ class Plots:
                 axis_text_x=p9.element_text(angle=60, size=7),
                 strip_text=p9.element_text(size=10),
             )
-            + p9.labs(x="", y="SMAPE")
+            + p9.labs(x="", y="Rank")
+            + p9.scale_fill_manual(values=cls.COLOR_MAP)
+            + p9.guides(fill=None)
+        )
+
+        return plot
+
+    @classmethod
+    def average_rank_by_horizons_boxplot(cls, df: pd.DataFrame):
+        model_medians = (
+            df.groupby("Model")["Rank"]
+            .median()
+            .sort_values(ascending=True)
+            .reset_index()
+        )
+        df_sorted = df.copy()
+        df_sorted["Model"] = pd.Categorical(
+            df_sorted["Model"], categories=model_medians["Model"].unique(), ordered=True
+        )
+        df_sorted = df_sorted.sort_values(["Model", "Rank"], ascending=[True, False])
+
+        plot = (
+            p9.ggplot(
+                data=df_sorted,
+                mapping=p9.aes(x="Model", y="Rank", fill="Model"),
+            )
+            + p9.facet_grid("~Horizon")
+            + p9.geom_boxplot()
+            + Plots.get_theme()
+            + p9.theme(
+                axis_text_x=p9.element_text(angle=60, size=7),
+                strip_text=p9.element_text(size=10),
+            )
+            + p9.labs(x="", y="Rank")
             + p9.scale_fill_manual(values=cls.COLOR_MAP)
             + p9.guides(fill=None)
         )

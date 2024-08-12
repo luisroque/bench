@@ -1,42 +1,33 @@
 import pandas as pd
 
-from codebase.load_data.config import DATASETS
+from codebase.load_data.config import DATASETS_FREQ, DATASETS
 
 data_list = []
 
-datasets = {
-    "Tourism": ["Monthly", "Quarterly"],
-    "M3": ["Monthly", "Quarterly", "Yearly"],
-    "M4": ["Monthly", "Quarterly", "Yearly"],
-    "M5": ["Daily"],
-}
-
-for data_name, groups in datasets.items():
+for data_name, groups in DATASETS_FREQ.items():
     for group in groups:
         data_cls = DATASETS[data_name]
         ds = data_cls.load_data(group)
         ds["group"] = group
         ds["unique_id"] = ds["unique_id"].apply(lambda x: f"{data_name}_{x}")
         ds["dataset"] = data_name
+        ds["horizon"] = data_cls.horizons_map[group]
+        ds["freq"] = data_cls.frequency_map[group]
 
         data_list.append(ds)
 
 df = pd.concat(data_list)
 
-df_groups = df.groupby(["dataset", "group"])
+df_groups = df.groupby(["dataset", "group", "horizon", "freq"])
 
-# TODO: update the below - add each dataset correct metrics to the main class
 info = {}
 for g, df_g in df_groups:
-    print(g)
-
     info[g] = {
         "n_ts": len(df_g["unique_id"].unique()),
         "n_obs": df_g.shape[0],
         "avg_len": df_g.groupby("unique_id").apply(lambda x: len(x)).median(),
-        "h": 6,
-        "input_size": 8,
-        "freq": 1,
+        "h": g[2],
+        "freq": g[3],
     }
 
 df_info = pd.DataFrame(info).T.astype(int)

@@ -8,27 +8,10 @@ from neuralforecast.auto import (
     AutoTiDE,
     AutoInformer,
 )
-from codebase.load_data.config import DATASETS
+from codebase.load_data.config import DATASETS, DATASETS_FREQ
 
-# Define the datasets and their groups
-datasets = {
-    "Tourism": ["Monthly", "Quarterly"],
-    "M3": ["Monthly", "Quarterly", "Yearly"],
-    "M4": ["Monthly", "Quarterly", "Yearly"],
-    "M5": ["Daily"],
-    "Labour": ["Monthly"],
-    "Traffic": ["Daily"],
-    "Wiki2": ["Daily"],
-    "ETTh1": ["Hourly"],
-    "ETTh2": ["Hourly"],
-    "ETTm1": ["15T"],
-    "ETTm2": ["15T"],
-    "ECL": ["15T"],
-    "TrafficL": ["15T"],
-    "Weather": ["10M"],
-}
 
-for data_name, groups in datasets.items():
+for data_name, groups in DATASETS_FREQ.items():
     for group in groups:
         data_cls = DATASETS[data_name]
         print(data_name, group)

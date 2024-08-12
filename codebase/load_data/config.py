@@ -30,3 +30,39 @@ DATASETS = {
     "TrafficL": TrafficLDataset,
     "Weather": WeatherDataset,
 }
+
+DATASETS_FREQ = {
+    "Tourism": ["Monthly", "Quarterly"],
+    "M3": ["Monthly", "Quarterly", "Yearly"],
+    "M4": ["Monthly", "Quarterly", "Yearly"],
+    "M5": ["Daily"],
+    "Labour": ["Monthly"],
+    "Traffic": ["Daily"],
+    "Wiki2": ["Daily"],
+    # "ETTh1": ["Hourly"],
+    # "ETTh2": ["Hourly"],
+    # "ETTm1": ["15T"],
+    # "ETTm2": ["15T"],
+    # "ECL": ["15T"],
+    # "TrafficL": ["15T"],
+    # "Weather": ["10M"],
+}
+
+REFERENCE_MODELS = [
+    "ETS",
+    "Theta",
+    "SES",
+    "Croston",
+    "ARIMA",
+    "RWD",
+    "SNaive",
+    "TiDE",
+    "TCN",
+    "DeepAR",
+    "Informer",
+    "NHITS",
+    "RNN",
+]
+
+N = [1, 2, 3, 4, 5, 6]
+SAMPLE_COUNT = 50

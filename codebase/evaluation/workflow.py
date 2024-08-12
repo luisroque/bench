@@ -6,11 +6,10 @@ import numpy as np
 import pandas as pd
 from neuralforecast.losses.numpy import mape, mae, smape, rmae
 
-from codebase.load_data.config import DATASETS
+from codebase.load_data.config import DATASETS, N, SAMPLE_COUNT
 
 
 class EvaluationWorkflow:
-    # todo get metadata from index
     RESULTS_DIR = "./assets/results/by_group"
 
     ALL_METADATA = [
@@ -38,9 +37,8 @@ class EvaluationWorkflow:
         self.hard_scores = pd.DataFrame()
         self.error_on_hard = pd.DataFrame()
 
-        self.cv = None
-        self.read_all_results()
-        self.models = self.get_model_names()
+        self.error_by_series = None
+        self.eval_by_series()
 
     def eval_by_horizon_full(self):
         cv_g = self.cv.groupby("freq")
@@ -66,136 +64,182 @@ class EvaluationWorkflow:
         return results_df
 
     def eval_by_horizon_first_and_last(self):
-        cv_grouped = self.cv.groupby("unique_id")
+        mean_errors = (
+            self.error_by_series.groupby(["Dataset", "Frequency", "Model"])[
+                ["First Horizon Error", "Last Horizon Error"]
+            ]
+            .mean()
+            .reset_index()
+        )
+        mean_errors["Rank First Horizon"] = mean_errors.groupby(
+            ["Dataset", "Frequency"]
+        )["First Horizon Error"].rank(method="average")
+        mean_errors["Rank Last Horizon"] = mean_errors.groupby(
+            ["Dataset", "Frequency"]
+        )["Last Horizon Error"].rank(method="average")
 
-        first_horizon, last_horizon = [], []
-        for g, df in cv_grouped:
-            first_horizon.append(df.iloc[0, :])
-            last_horizon.append(df.iloc[-1, :])
+        melted_mean_errors = pd.melt(
+            mean_errors,
+            id_vars=["Model", "Dataset", "Frequency"],
+            value_vars=["Rank First Horizon", "Rank Last Horizon"],
+            var_name="Horizon",
+            value_name="Rank",
+        )
 
-        first_h_df = pd.concat(first_horizon, axis=1).T
-        last_h_df = pd.concat(last_horizon, axis=1).T
+        melted_mean_errors["Horizon"] = melted_mean_errors["Horizon"].replace(
+            {"Rank First Horizon": "First", "Rank Last Horizon": "Last"}
+        )
 
-        errf_df = self.run(first_h_df)
-        errl_df = self.run(last_h_df)
-        err_df = errf_df.merge(errl_df, on="Model")
-        err_df.columns = ["Model", "First horizon", "Last horizon"]
+        mean_rank = (
+            melted_mean_errors.groupby(["Model", "Horizon"])["Rank"]
+            .mean()
+            .reset_index()
+        )
 
-        err_melted_df = err_df.melt("Model")
-        err_melted_df.columns = ["Model", "Horizon", "Error"]
+        return mean_rank
 
-        return err_melted_df
+    def eval_by_horizon_first_and_last_dist(self):
+        mean_errors = (
+            self.error_by_series.groupby(["Dataset", "Frequency", "Model"])[
+                ["First Horizon Error", "Last Horizon Error"]
+            ]
+            .mean()
+            .reset_index()
+        )
+        mean_errors["Rank First Horizon"] = mean_errors.groupby(
+            ["Dataset", "Frequency"]
+        )["First Horizon Error"].rank(method="average")
+        mean_errors["Rank Last Horizon"] = mean_errors.groupby(
+            ["Dataset", "Frequency"]
+        )["Last Horizon Error"].rank(method="average")
+
+        melted_mean_errors = pd.melt(
+            mean_errors,
+            id_vars=["Model", "Dataset", "Frequency"],
+            value_vars=["Rank First Horizon", "Rank Last Horizon"],
+            var_name="Horizon",
+            value_name="Rank",
+        )
+
+        melted_mean_errors["Horizon"] = melted_mean_errors["Horizon"].replace(
+            {"Rank First Horizon": "First", "Rank Last Horizon": "Last"}
+        )
+
+        return melted_mean_errors
 
     def eval_by_series(self):
-        cv_group = self.cv.groupby("unique_id")
-
         output_dir = "./assets/metrics/by_series/"
         os.makedirs(output_dir, exist_ok=True)
 
         dataset_names = "_".join(self.datasets)
-        output_path = f"./assets/metrics/by_series/{dataset_names}_error_by_series.csv"
+        output_path = os.path.join(output_dir, f"{dataset_names}_error_by_series.csv")
 
         if os.path.exists(output_path):
             print(f"File {output_path} already exists. Loading existing data.")
-            return pd.read_csv(output_path)
+            self.error_by_series = pd.read_csv(output_path)
+            return
 
-        results_by_series = {}
-        total_groups = len(cv_group)
-        for i, (g, df) in enumerate(cv_group, start=1):
-            results_by_series[g] = self.run(df)
-            if i % 100 == 0 or i == total_groups:
-                print(f"Processed {i}/{total_groups} series")
+        self.read_all_results()
+        cv_group = self.cv.groupby("unique_id")
+
+        results_by_series = self._process_groups(cv_group)
 
         results_df = pd.concat(
-            {k: df for k, df in results_by_series.items()}, names=["Series"]
+            results_by_series.values(), keys=results_by_series.keys(), names=["Series"]
         ).reset_index(level=0)
 
         results_df.to_csv(output_path, index=False)
-        print(f"Storing eval by series on {output_path}")
-        return results_df
+        print(f"Stored evaluation by series in {output_path}")
+        self.error_by_series = results_df
 
-    def eval_by_anomalies(self):
-        cv_group = self.cv.groupby("unique_id")
+    def _process_groups(self, cv_group):
+        results_by_series = {}
+        total_groups = len(cv_group)
 
-        results_by_series, cv_df = {}, []
-        for g, df in cv_group:
-            # print(g)
-            df_ = df.loc[df["is_anomaly_95"] > 0, :]
-            if df_.shape[0] > 0:
-                cv_df.append(df_)
-                results_by_series[g] = self.run(df_)
+        for i, (group_id, df) in enumerate(cv_group, start=1):
+            results_by_series[group_id] = self._evaluate_group(df)
+            if i % 100 == 0 or i == total_groups:
+                print(f"Processed {i}/{total_groups} series")
 
-        cv_df = pd.concat(cv_df).reset_index(drop=True)
-        result_all = self.run(cv_df)
+        return results_by_series
 
-        results_df = pd.concat(results_by_series, axis=1).T
+    def _evaluate_group(self, df):
+        result = self.run(df)
+        result["Dataset"] = df["dataset"].unique()[0]
+        result["Frequency"] = df["freq"].unique()[0]
 
-        return results_df, result_all
-
-    def eval_by_anomalous_series(self):
-        cv_group = self.cv.groupby("unique_id")
-
-        results_by_series, cv_df = {}, []
-        for g, df in cv_group:
-            # print(g)
-            if df["is_anomaly_95"].sum() > 0:
-                cv_df.append(df)
-                results_by_series[g] = self.run(df)
-
-        cv_df = pd.concat(cv_df).reset_index(drop=True)
-        result_all = self.run(cv_df)
-        results_df = pd.concat(results_by_series, axis=1).T
-
-        return results_df, result_all
-
-    @staticmethod
-    def get_expected_shortfall(df, thr=0.9):
-        output_dir = "./assets/metrics/by_group/"
-        os.makedirs(output_dir, exist_ok=True)
-
-        # get the dataset
-        df["Dataset"] = df["Series"].str.extract(r"([a-zA-Z0-9]+)")
-        df["Dataset_Frequency"] = df["Series"].str.extract(
-            r"([a-zA-Z0-9]+_[a-zA-Z0-9])"
+        first_horizon_error = self._calculate_horizon_error(
+            df, 1, "First Horizon Error"
+        )
+        last_horizon_error = self._calculate_horizon_error(
+            df, df["horizon"].max(), "Last Horizon Error"
         )
 
-        dataset_names = "_".join(df["Dataset"].unique())
-        output_path = os.path.join(
-            output_dir, f"{dataset_names}_expected_shortfall.csv"
+        result = result.merge(first_horizon_error, on="Model", how="left")
+        result = result.merge(last_horizon_error, on="Model", how="left")
+
+        return result
+
+    def _calculate_horizon_error(self, df, horizon_value, error_column_name):
+        horizon_df = df[df["horizon"] == horizon_value]
+        error_df = self.run(horizon_df)
+        error_df.columns = ["Model", error_column_name]
+        return error_df
+
+    def eval_rank_total(self):
+        mean_errors = (
+            self.error_by_series.groupby(["Dataset", "Frequency", "Model"])["Error"]
+            .mean()
+            .reset_index()
+        )
+        mean_errors["Rank"] = mean_errors.groupby(["Dataset", "Frequency"])[
+            "Error"
+        ].rank(method="average")
+        mean_rank = mean_errors.groupby("Model")["Rank"].mean().reset_index()
+
+        return mean_rank
+
+    def eval_rank_total_dist(self):
+        mean_errors = (
+            self.error_by_series.groupby(["Dataset", "Frequency", "Model"])["Error"]
+            .mean()
+            .reset_index()
+        )
+        mean_errors["Rank"] = mean_errors.groupby(["Dataset", "Frequency"])[
+            "Error"
+        ].rank(method="average")
+
+        return mean_errors
+
+    def eval_rank_by_freq(self):
+        mean_errors = (
+            self.error_by_series.groupby(["Dataset", "Frequency", "Model"])["Error"]
+            .mean()
+            .reset_index()
+        )
+        mean_errors["Rank"] = mean_errors.groupby(["Dataset", "Frequency"])[
+            "Error"
+        ].rank(method="average")
+        mean_rank_by_freq = (
+            mean_errors.groupby(["Frequency", "Model"])["Rank"].mean().reset_index()
         )
 
-        if os.path.exists(output_path):
-            print(f"File {output_path} already exists. Loading existing data.")
-            return pd.read_csv(output_path)
+        return mean_rank_by_freq
 
-        # calculate the 95th percentile for each Dataset and Model combination
-        percentile_95 = (
-            df.groupby(["Dataset", "Model"])["Error"].quantile(thr).reset_index()
+    def eval_rank_by_dataset(self):
+        mean_errors = (
+            self.error_by_series.groupby(["Dataset", "Frequency", "Model"])["Error"]
+            .mean()
+            .reset_index()
+        )
+        mean_errors["Rank"] = mean_errors.groupby(["Dataset", "Frequency"])[
+            "Error"
+        ].rank(method="average")
+        mean_rank_by_dataset = (
+            mean_errors.groupby(["Dataset", "Model"])["Rank"].mean().reset_index()
         )
 
-        df = df.merge(percentile_95, on=["Dataset", "Model"])
-        df = df.rename(columns={"Error_x": "Error", "Error_y": "95th Percentile"})
-
-        worst_5_percent = df[df["Error"] >= df["95th Percentile"]]
-        worst_5_percent = worst_5_percent.drop(columns=["95th Percentile"])
-
-        shortfall = worst_5_percent.groupby(["Model"])["Error"].mean().reset_index()
-        shortfall.to_csv(output_path, index=False)
-        print(f"Storing shortfall on {output_path}")
-
-        return shortfall
-
-    def eval_by_frequency(self):
-        cv_group = self.cv.groupby("freq")
-
-        results_by_freq = {}
-        for g, df in cv_group:
-            results_by_freq[g] = self.run(df)
-
-        results_df = pd.concat(
-            {k: df for k, df in results_by_freq.items()}, names=["Frequency"]
-        ).reset_index(level=0)
-        return results_df
+        return mean_rank_by_dataset
 
     def run(self, cv: typing.Optional[pd.DataFrame] = None) -> pd.DataFrame:
         if cv is None or cv.empty:
@@ -209,64 +253,6 @@ class EvaluationWorkflow:
         evaluation.columns = ["Model", "Error"]
 
         return evaluation
-
-    def get_hard_series(self, error_by_unique_id: pd.DataFrame):
-
-        output_dir = "./assets/metrics/by_group/"
-        os.makedirs(output_dir, exist_ok=True)
-
-        error_by_unique_id["Dataset"] = error_by_unique_id["Series"].str.extract(
-            r"([a-zA-Z0-9]+)"
-        )
-        error_by_unique_id["Dataset_Frequency"] = error_by_unique_id[
-            "Series"
-        ].str.extract(r"([a-zA-Z0-9]+_[a-zA-Z0-9])")
-
-        dataset_names = "_".join(error_by_unique_id["Dataset"].unique())
-
-        output_path = os.path.join(output_dir, f"{dataset_names}_hard_series.csv")
-        output_path_thr = os.path.join(
-            output_dir, f"{dataset_names}_hard_series_thr.csv"
-        )
-
-        if os.path.exists(output_path):
-            print(f"File {output_path} already exists. Loading existing data.")
-            return pd.read_csv(output_path), pd.read_csv(output_path_thr)
-
-        snaive_error = error_by_unique_id[error_by_unique_id.Model == self.baseline]
-
-        percentile_95_baseline = (
-            snaive_error.groupby(["Dataset_Frequency"])["Error"]
-            .quantile(0.95)
-            .reset_index()
-        )
-
-        error_by_unique_id = error_by_unique_id.merge(
-            percentile_95_baseline, on=["Dataset_Frequency"]
-        )
-        error_by_unique_id = error_by_unique_id.rename(
-            columns={"Error_x": "Error", "Error_y": f"95th Percentile {self.baseline}"}
-        )
-
-        hard_series = error_by_unique_id[
-            error_by_unique_id["Error"]
-            >= error_by_unique_id[f"95th Percentile {self.baseline}"]
-        ]
-        hard_series = hard_series.drop(columns=[f"95th Percentile {self.baseline}"])
-
-        error_on_hard = hard_series.groupby(["Model"])["Error"].mean().reset_index()
-        error_on_hard.to_csv(output_path, index=False)
-        percentile_95_baseline.to_csv(output_path_thr, index=False)
-
-        print(f"Storing error on hard series on {output_path}")
-
-        return error_on_hard, percentile_95_baseline
-
-    def get_model_names(self):
-        metadata = self.cv.columns.str.contains("|".join(self.ALL_METADATA))
-        models = self.cv.loc[:, ~metadata].columns.tolist()
-
-        return models
 
     def map_forecasting_horizon_col(self):
         cv_g = self.cv.groupby("unique_id")
@@ -306,7 +292,7 @@ class EvaluationWorkflow:
         for ds in dataset_list:
             print(ds)
             for group in DATASETS[ds].data_group:
-                print(group)
+                print(f"    {group}")
 
                 try:
                     group_df = pd.read_csv(f"{self.RESULTS_DIR}/{ds}_{group}_all.csv")
@@ -327,11 +313,13 @@ class EvaluationWorkflow:
         )
         results_df["freq"] = results_df["freq"].map(
             {
-                "QS": "Quarterly",
-                "MS": "Monthly",
-                "M": "Monthly",
-                "Q": "Quarterly",
                 "Y": "Yearly",
+                "Q": "Quarterly",
+                "M": "Monthly",
+                "D": "Daily",
+                "H": "Hourly",
+                "15T": "15T",
+                "10T": "10M",
             }
         )
 
@@ -349,57 +337,37 @@ class EvaluationWorkflow:
         self.cv.to_csv(output_path, index=False)
         print(f"Storing preprocessed data on {output_path}")
 
-    @staticmethod
-    def error_by_model(df: pd.DataFrame):
+    def error_by_model(self):
+        df = self.error_by_series
         df_output = df.groupby("Model")["Error"].mean().reset_index()
 
         return df_output
 
-    @staticmethod
-    def rank_by_model(df: pd.DataFrame):
-        df["Dataset"] = df["Series"].str.extract(r"([a-zA-Z0-9]+)")
-        df["Dataset_Frequency"] = df["Series"].str.extract(
-            r"([a-zA-Z0-9]+_[a-zA-Z0-9])"
-        )
+    def rank_by_model(self):
+        df = self.error_by_series
+        df["Dataset_Frequency"] = df["Dataset"] + df["Frequency"]
         df["Rank"] = df.groupby("Series")["Error"].rank(method="average")
 
         return df
 
-    def avg_rank_n_datasets_random(
-        self, df: pd.DataFrame, N: typing.List[int], sample_count: int
-    ):
+    def avg_rank_n_datasets_random(self):
         output_dir = "./assets/metrics/by_n/"
         os.makedirs(output_dir, exist_ok=True)
 
-        # get the dataset
-        df["Dataset"] = df["Series"].str.extract(r"([a-zA-Z0-9]+)")
-        df["Dataset_Frequency"] = df["Series"].str.extract(
-            r"([a-zA-Z0-9]+_[a-zA-Z0-9])"
-        )
+        df = self.eval_rank_total_dist()
+        df["Dataset_Frequency"] = df["Dataset"] + df["Frequency"]
 
         dataset_names = "_".join(df["Dataset"].unique())
-        output_path_raw = os.path.join(
-            output_dir, f"{dataset_names}_raw_avg_rank_n_datasets.csv"
-        )
         output_path_by_n = os.path.join(
             output_dir, f"{dataset_names}_avg_rank_by_n.csv"
         )
-        output_path_by_n_by_series = os.path.join(
-            output_dir, f"{dataset_names}_avg_rank_by_n_by_series.csv"
-        )
 
-        if os.path.exists(output_path_by_n) and os.path.exists(
-            output_path_by_n_by_series
-        ):
-            print(
-                f"File {output_path_by_n} and {output_path_by_n_by_series} already exists. Loading existing data."
-            )
-            return pd.read_csv(output_path_by_n), pd.read_csv(
-                output_path_by_n_by_series
-            )
+        if os.path.exists(output_path_by_n):
+            print(f"File {output_path_by_n} already exists. Loading existing data.")
+            return pd.read_csv(output_path_by_n)
 
         all_results = []
-        for count in range(1, sample_count + 1):
+        for count in range(1, SAMPLE_COUNT + 1):
             for n in N:
                 datasets = df["Dataset_Frequency"].unique().tolist()
                 selected_datasets = random.sample(datasets, n)
@@ -411,89 +379,72 @@ class EvaluationWorkflow:
                 filtered_df["Selected_Datasets"] = [selected_datasets] * len(
                     filtered_df
                 )
+                filtered_df["Selected_Datasets"] = filtered_df[
+                    "Selected_Datasets"
+                ].apply(tuple)
                 filtered_df["n"] = n
                 filtered_df["Sample_Count"] = count
 
-                all_results.append(filtered_df)
+                # Compute average rank for N
+                filtered_df_avg = (
+                    filtered_df.groupby(
+                        ["Model", "Selected_Datasets", "n", "Sample_Count"]
+                    )["Rank"]
+                    .mean()
+                    .reset_index()
+                )
+
+                # Rank again
+                filtered_df_avg["Min_Rank"] = filtered_df_avg.groupby(
+                    ["Selected_Datasets", "n", "Sample_Count"]
+                )["Rank"].rank(method="min")
+
+                all_results.append(filtered_df_avg)
 
         final_results_df = pd.concat(all_results, ignore_index=True)
-        final_results_df["Selected_Datasets"] = final_results_df[
-            "Selected_Datasets"
-        ].apply(tuple)
-        final_results_df.to_csv(output_path_raw, index=False)
-        print(f"Storing RAW avg ranks for n datasets on {output_path_raw}")
 
         # Computing variance of the mean rank by samples for each N datasets that we random sample
-        avg_by_n_datasets = self._compute_avg_rank_n_datasets(final_results_df)
-        avg_by_n_datasets.to_csv(output_path_by_n, index=False)
+        final_results_df.to_csv(output_path_by_n, index=False)
         print(f"Storing avg ranks for n datasets on {output_path_by_n}")
 
-        # Computing variance of the mean rank by samples for each N datasets that we random sample
-        avg_by_n_datasets_by_series = self._compute_avg_rank_n_datasets_by_series(
-            final_results_df
-        )
-        avg_by_n_datasets_by_series.to_csv(output_path_by_n_by_series, index=False)
-        print(
-            f"Storing avg ranks for n datasets BY series on {output_path_by_n_by_series}"
-        )
+        return final_results_df
 
-        return avg_by_n_datasets, avg_by_n_datasets_by_series
-
-    def avg_rank_n_datasets(self, df: pd.DataFrame, reference_model: str):
+    def avg_rank_n_datasets(self, reference_model: str):
+        df = self.error_by_series
         output_dir = "./assets/metrics/by_n/"
         os.makedirs(output_dir, exist_ok=True)
 
-        # get the dataset
-        df["Dataset"] = df["Series"].str.extract(r"([a-zA-Z0-9]+)")
-        df["Dataset_Frequency"] = df["Series"].str.extract(
-            r"([a-zA-Z0-9]+_[a-zA-Z0-9])"
-        )
+        df["Dataset_Frequency"] = df["Dataset"] + df["Frequency"]
 
         dataset_names = "_".join(df["Dataset"].unique())
-        input_path_raw = os.path.join(
-            output_dir, f"{dataset_names}_raw_avg_rank_n_datasets.csv"
-        )
+        input_path_raw = os.path.join(output_dir, f"{dataset_names}_avg_rank_by_n.csv")
 
         if os.path.exists(input_path_raw):
             print(f"File {input_path_raw} already exists. Loading existing data.")
             raw_data = pd.read_csv(input_path_raw)
-        grouped_by_experiment = (
-            raw_data.groupby(["Model", "n", "Sample_Count", "Selected_Datasets"])[
-                "Error"
-            ]
-            .mean()
-            .reset_index(name="Error")
+        else:
+            self.avg_rank_n_datasets_random()
+        raw_data = pd.read_csv(input_path_raw)
+        ref_model_min_idx = (
+            raw_data[raw_data["Model"] == reference_model]
+            .groupby(["n"])["Min_Rank"]
+            .idxmin()
         )
-        grouped_by_experiment["Rank"] = grouped_by_experiment.groupby(
-            ["n", "Sample_Count", "Selected_Datasets"]
-        )["Error"].rank(method="min", ascending=True)
-        min_ranks = (
-            grouped_by_experiment.groupby(["Model", "n"])["Rank"].min().reset_index()
-        )
-        min_ranks = pd.merge(
-            min_ranks, grouped_by_experiment, on=["Model", "n", "Rank"]
-        )
-        min_ranks.rename(columns={"Rank": "Min_Rank"}, inplace=True)
-        criteria = min_ranks[min_ranks.Model == reference_model][
-            ["n", "Sample_Count", "Selected_Datasets"]
+        best_model_data = raw_data.loc[ref_model_min_idx]
+        filtered_data = raw_data[
+            raw_data.set_index(["n", "Selected_Datasets", "Sample_Count"]).index.isin(
+                best_model_data.set_index(
+                    ["n", "Selected_Datasets", "Sample_Count"]
+                ).index
+            )
         ]
-        reference_model_results = grouped_by_experiment.merge(
-            criteria, on=["n", "Sample_Count", "Selected_Datasets"], how="inner"
+        filtered_data = filtered_data.drop("Rank", axis=1)
+        filtered_data = filtered_data.sort_values(
+            by=["n", "Selected_Datasets", "Sample_Count", "Min_Rank"]
         )
+        filtered_data.rename(columns={"Min_Rank": "Rank"}, inplace=True)
 
-        return reference_model_results
-
-    def _compute_avg_rank_n_datasets(self, df):
-        grouped_by_experiment = (
-            df.groupby(["Model", "n", "Sample_Count", "Selected_Datasets"])["Error"]
-            .mean()
-            .reset_index(name="Error")
-        )
-        grouped_by_experiment["Rank"] = grouped_by_experiment.groupby(
-            ["n", "Sample_Count", "Selected_Datasets"]
-        )["Error"].rank(method="min", ascending=True)
-
-        return grouped_by_experiment
+        return filtered_data
 
     def _compute_avg_rank_n_datasets_by_series(self, df):
         df["Selected_Datasets"] = df["Selected_Datasets"].apply(tuple)

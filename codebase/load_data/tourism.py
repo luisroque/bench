@@ -13,7 +13,7 @@ class TourismDataset(LoadDataset):
 
     DATA_URL = "https://robjhyndman.com/data/27-3-Athanasopoulos1.zip"
 
-    frequency_pd = {"Yearly": "Y", "Quarterly": "QS", "Monthly": "MS"}
+    frequency_pd_tourism = {"Yearly": "Y", "Quarterly": "QS", "Monthly": "MS"}
 
     @classmethod
     def download_and_extract(cls):

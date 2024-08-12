@@ -1,20 +1,13 @@
 import pandas as pd
 from neuralforecast.losses.numpy import smape
 
-from codebase.load_data.config import DATASETS
-
-datasets = {
-    "Tourism": ["Monthly", "Quarterly"],
-    "M3": ["Monthly", "Quarterly", "Yearly"],
-    "M4": ["Monthly", "Quarterly", "Yearly"],
-    "M5": ["Daily"],
-}
+from codebase.load_data.config import DATASETS, DATASETS_FREQ
 
 cv_neural = pd.read_csv(
     "./assets/results/by_group/{}_{}_neural.csv".format("Tourism", "Quarterly")
 )
 
-for data_name, groups in datasets.items():
+for data_name, groups in DATASETS_FREQ.items():
     for group in groups:
 
         data_cls = DATASETS[data_name]
@@ -48,6 +41,6 @@ for data_name, groups in datasets.items():
         cv.to_csv(output_file, index=False)
 
         print(cv.isna().mean())
-        print(smape(cv["y"], cv["NBEATS"]))
+        print(smape(cv["y"], cv["NHITS"]))
         print(smape(cv["y"], cv["SeasonalNaive"]))
         print(smape(cv["y"], cv["AutoTheta"]))

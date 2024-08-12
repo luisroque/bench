@@ -12,27 +12,9 @@ from statsforecast.models import (
     CrostonOptimized,
 )
 
-from codebase.load_data.config import DATASETS
+from codebase.load_data.config import DATASETS, DATASETS_FREQ
 
-# Define the datasets and their groups
-datasets = {
-    "Tourism": ["Monthly", "Quarterly"],
-    "M3": ["Monthly", "Quarterly", "Yearly"],
-    "M4": ["Monthly", "Quarterly", "Yearly"],
-    "M5": ["Daily"],
-    "Labour": ["Monthly"],
-    "Traffic": ["Daily"],
-    "Wiki2": ["Daily"],
-    "ETTh1": ["Hourly"],
-    "ETTh2": ["Hourly"],
-    "ETTm1": ["15T"],
-    "ETTm2": ["15T"],
-    "ECL": ["15T"],
-    "TrafficL": ["15T"],
-    "Weather": ["10M"],
-}
-
-for data_name, groups in datasets.items():
+for data_name, groups in DATASETS_FREQ.items():
     for group in groups:
         data_cls = DATASETS[data_name]
 
@@ -48,6 +30,16 @@ for data_name, groups in datasets.items():
 
         ds_grouped = ds.groupby("unique_id")
         for tsname, df in ds_grouped:
+            tsname = (
+                tsname.replace(".", "")
+                .replace("/", "-")
+                .replace("\\", "-")
+                .replace("_", "-")
+                .replace(",", "")
+                .replace("[", "")
+                .replace("]", "")
+                .replace("'", "")
+            )
             print(data_name, group, tsname)
             filepath = f"./assets/results/by_series/cv_{data_name}_{group}_{tsname}_classical.csv"
 
