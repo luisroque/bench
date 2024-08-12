@@ -1,7 +1,7 @@
 import plotnine as p9
 from codebase.evaluation.workflow import EvaluationWorkflow
 from codebase.evaluation.plotting import Plots
-from codebase.load_data.config import DATASETS_FREQ, N, SAMPLE_COUNT
+from codebase.load_data.config import DATASETS_FREQ
 
 
 datasets = list(DATASETS_FREQ.keys())

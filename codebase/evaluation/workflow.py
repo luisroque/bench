@@ -424,13 +424,15 @@ class EvaluationWorkflow:
             raw_data = pd.read_csv(input_path_raw)
         else:
             self.avg_rank_n_datasets_random()
-        raw_data = pd.read_csv(input_path_raw)
+            raw_data = pd.read_csv(input_path_raw)
+
         ref_model_min_idx = (
             raw_data[raw_data["Model"] == reference_model]
             .groupby(["n"])["Min_Rank"]
             .idxmin()
         )
         best_model_data = raw_data.loc[ref_model_min_idx]
+
         filtered_data = raw_data[
             raw_data.set_index(["n", "Selected_Datasets", "Sample_Count"]).index.isin(
                 best_model_data.set_index(
