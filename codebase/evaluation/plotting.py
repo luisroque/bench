@@ -144,6 +144,53 @@ class Plots:
         return plot
 
     @classmethod
+    def top_n_lineplot(cls, df: pd.DataFrame):
+        df["Percentage"] = df["Percentage"] * 100
+        df = df.sort_values("Models in Top", ascending=False).reset_index(drop=True)
+        df["Models in Top"] = pd.Categorical(
+            df["Models in Top"].values.tolist(),
+            categories=df["Models in Top"].unique(),
+        )
+        plot = (
+            p9.ggplot(
+                data=df,
+                mapping=p9.aes(
+                    x="n", y="Percentage", color="Models in Top", group="Models in Top"
+                ),
+            )
+            + p9.scale_color_manual(values=["#4C72B0", "#DD8452", "#69a765"])
+            + p9.geom_line(size=1.5)
+            + p9.geom_point(size=3)
+            + p9.geom_text(
+                p9.aes(label=p9.after_stat("y")),
+                nudge_y=1.5,
+                color="black",
+                size=8,
+                format_string="{:.0f}%",
+                va="bottom",
+            )
+            + Plots.get_theme()
+            + p9.theme(
+                axis_text_x=p9.element_text(size=10),
+                axis_text_y=p9.element_text(size=10),
+                plot_title=p9.element_text(size=12, weight="bold"),
+                plot_background=p9.element_rect(fill="white"),
+                panel_grid_major=p9.element_line(color="gray", linetype="--", size=0.5),
+                panel_grid_minor=p9.element_line(
+                    color="gray", linetype="--", size=0.25
+                ),
+            )
+            + p9.labs(
+                x="Number of Datasets (n)",
+                y="Percentage of Models in Top Positions",
+                # title="Percentage of Models in Top 1, 2, and 3 Positions Across Datasets",
+                color="Models in Top",
+            )
+        )
+
+        return plot
+
+    @classmethod
     def average_rank_n_barplot(
         cls, df: pd.DataFrame, facet_attribute=None, reference_model=None
     ):

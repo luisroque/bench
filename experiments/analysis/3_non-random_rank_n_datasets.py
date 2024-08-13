@@ -12,7 +12,7 @@ for i, reference_model in enumerate(REFERENCE_MODELS):
 
     cherry_picking = Plots.average_rank_n_barplot(
         df_avg_rank_n_datasets, "n", reference_model
-    ) + p9.labs(y="Cherry-Picking Datasets")
+    ) + p9.labs(y=f"{reference_model}")
 
     cherry_picking.save(
         f"assets/plots/3.{i}_cherry_picking_{reference_model}.pdf", width=5, height=5

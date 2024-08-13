@@ -245,7 +245,7 @@ class EvaluationWorkflow:
         if cv is None or cv.empty:
             cv = self.cv
         evaluation = {}
-        for model in self.models:
+        for model in REFERENCE_MODELS:
             evaluation[model] = self.func(y=cv["y"], y_hat=cv[model])
 
         evaluation = pd.Series(evaluation)
@@ -458,7 +458,7 @@ class EvaluationWorkflow:
 
         return grouped_by_experiment
 
-    def compute_agg_rank(self):
+    def compute_agg_rank(self, n):
         all_models = []
         for model in REFERENCE_MODELS:
             avg_rank_model = self.avg_rank_n_datasets(model)
@@ -472,7 +472,7 @@ class EvaluationWorkflow:
         top = {}
         for i in range(1, 4):
             top_i = all_models_concat.loc[
-                (all_models_concat["n"] == 1) & (all_models_concat["Rank"] <= i)
+                (all_models_concat["n"] == n) & (all_models_concat["Rank"] <= i)
             ]
             top_i_perc = top_i.shape[0] / len(REFERENCE_MODELS)
             top[i] = top_i_perc
