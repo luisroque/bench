@@ -151,6 +151,8 @@ class Plots:
             df["Models in Top"].values.tolist(),
             categories=df["Models in Top"].unique(),
         )
+
+        truetype_font = "Arial"
         plot = (
             p9.ggplot(
                 data=df,
@@ -161,19 +163,23 @@ class Plots:
             + p9.scale_color_manual(values=["#4C72B0", "#DD8452", "#69a765"])
             + p9.geom_line(size=1.5)
             + p9.geom_point(size=3)
-            + p9.geom_text(
-                p9.aes(label=p9.after_stat("y")),
-                nudge_y=1.5,
-                color="black",
-                size=8,
-                format_string="{:.0f}%",
-                va="bottom",
-            )
+            # + p9.geom_text(
+            #     p9.aes(label=p9.after_stat("y")),
+            #     nudge_y=1.5,
+            #     color="black",
+            #     size=8,
+            #     format_string="{:.0f}%",
+            #     va="bottom",
+            # )
             + Plots.get_theme()
             + p9.theme(
-                axis_text_x=p9.element_text(size=10),
-                axis_text_y=p9.element_text(size=10),
-                plot_title=p9.element_text(size=12, weight="bold"),
+                axis_text_x=p9.element_text(size=10, family=truetype_font),
+                axis_text_y=p9.element_text(size=10, family=truetype_font),
+                plot_title=p9.element_text(
+                    size=12, weight="bold", family=truetype_font
+                ),
+                legend_text=p9.element_text(size=10, family=truetype_font),
+                legend_title=p9.element_text(size=12, family=truetype_font),
                 plot_background=p9.element_rect(fill="white"),
                 panel_grid_major=p9.element_line(color="gray", linetype="--", size=0.5),
                 panel_grid_minor=p9.element_line(
